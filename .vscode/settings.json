@@ -1,0 +1,14 @@
+{
+  "files.associations": {
+    "*.overlay": "dts",
+    "*.keymap": "dts"
+  },
+  "python.formatting.provider": "black",
+  "cmake.sourceDirectory": "${workspaceFolder}/app",
+  "cmake.buildDirectory": "${workspaceFolder}/app/build",
+  "makefile.compileCommandsPath": "${workspaceFolder}/app/build/compile_commands.json",
+  "search.exclude": {
+    "zephyr/**": false,
+  },
+  "devicetree.zephyr": "${workspaceFolder}/zephyr"
+}

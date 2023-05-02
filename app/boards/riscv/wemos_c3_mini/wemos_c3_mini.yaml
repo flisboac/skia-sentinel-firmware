@@ -1,0 +1,16 @@
+identifier: wemos_lolin_c3_mini
+name: Wemos LOLIN C3 Mini
+type: mcu
+arch: riscv
+toolchain:
+  - zephyr
+supported:
+  - gpio
+  - i2c
+  - spi
+  - uart
+  - watchdog
+testing:
+  ignore_tags:
+    - net
+    - bluetooth

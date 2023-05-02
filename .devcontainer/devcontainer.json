@@ -1,0 +1,32 @@
+{
+  "name": "Skia Development",
+  "dockerFile": "Dockerfile",
+  "runArgs": [
+    "--security-opt",
+    "label=disable"
+  ],
+  "containerEnv": {
+    "WORKSPACE_DIR": "${containerWorkspaceFolder}",
+    "PROMPT_COMMAND": "history -a"
+  },
+  "mounts": [
+    "type=volume,source=skia-root-user,target=/root",
+    "type=volume,source=skia-config,target=/workspaces/skia-config",
+    "type=volume,source=skia-zephyr,target=${containerWorkspaceFolder}/zephyr",
+    "type=volume,source=skia-zephyr-modules,target=${containerWorkspaceFolder}/modules",
+    "type=volume,source=skia-zephyr-tools,target=${containerWorkspaceFolder}/tools"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools"
+      ]
+    },
+    "settings": {
+      "terminal.integrated.shell.linux": "/bin/bash"
+    }
+  },
+  "forwardPorts": [
+    3000
+  ]
+}

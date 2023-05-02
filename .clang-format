@@ -1,0 +1,154 @@
+BasedOnStyle: WebKit
+UseTab: Never
+UseCRLF: false
+IndentWidth: 4
+TabWidth: 4
+ContinuationIndentWidth: 4
+ConstructorInitializerIndentWidth: 4
+ColumnLimit: 120
+
+AlignAfterOpenBracket: BlockIndent
+AlignArrayOfStructures: None  # Left
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignConsecutiveMacros: false
+AlignEscapedNewlines: DontAlign
+AlignOperands: DontAlign
+AlignTrailingComments: false
+AllowAllArgumentsOnNextLine: true
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowShortBlocksOnASingleLine: Always
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: true
+AllowShortLambdasOnASingleLine: All
+AllowShortLoopsOnASingleLine: true
+AlwaysBreakBeforeMultilineStrings: true
+AlwaysBreakTemplateDeclarations: Yes
+BinPackArguments: false
+BinPackParameters: false
+BreakAfterJavaFieldAnnotations: true
+BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeBraces: Custom
+# BreakBeforeConceptDeclarations: Always
+BreakBeforeConceptDeclarations: true
+BraceWrapping:
+  AfterEnum: true
+  AfterExternBlock: true
+  AfterFunction: true
+  AfterStruct: true
+  AfterClass: true
+  AfterUnion: true
+  AfterNamespace: true
+  BeforeCatch: false
+  BeforeElse: false
+  BeforeWhile: true
+  IndentBraces: false
+  SplitEmptyFunction: false
+  SplitEmptyNamespace: false
+  SplitEmptyRecord: false
+  AfterControlStatement: Never
+BreakBeforeTernaryOperators: true
+BreakConstructorInitializers: BeforeComma
+BreakInheritanceList: BeforeComma
+CompactNamespaces: true
+ConstructorInitializerAllOnOneLineOrOnePerLine: false
+Cpp11BracedListStyle: false
+EmptyLineBeforeAccessModifier: LogicalBlock
+FixNamespaceComments: true
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: '<[[:alnum:]\._-]+>'
+    Priority: 1
+    SortPriority: 0
+  - Regex: '^"[[:alnum:]\._-]+'
+    Priority: 2
+    SortPriority: 2
+  - Regex: '^"dame\.cfg\.(cpp|hpp)"$'
+    Priority: 10
+    SortPriority: 10
+  - Regex: '^"dame(\.|\.fwd\.)(cpp|hpp)"$'
+    Priority: 10
+    SortPriority: 11
+  - Regex: '^"dame/[[:alnum:]\._-]+\.cfg\.(cpp|hpp)"$'
+    Priority: 20
+    SortPriority: 20
+  - Regex: '^"dame/[[:alnum:]\._-]+\.fwd\.(cpp|hpp)"$'
+    Priority: 20
+    SortPriority: 21
+  - Regex: '^"dame/[[:alnum:]\._-]+\.(cpp|hpp)"$'
+    Priority: 20
+    SortPriority: 22
+  - Regex: '^"dame/detail/[[:alnum:]\._-]+(/[[:alnum:]\._-]+)*\.cfg\.(cpp|hpp)"$'
+    Priority: 30
+    SortPriority: 30
+  - Regex: '^"dame/detail/[[:alnum:]\._-]+(/[[:alnum:]\._-]+)*\.fwd\.(cpp|hpp)"$'
+    Priority: 30
+    SortPriority: 31
+  - Regex: '^"dame/detail/[[:alnum:]\._-]+(/[[:alnum:]\._-]+)*\.(cpp|hpp)"$'
+    Priority: 30
+    SortPriority: 32
+  - Regex: '^"dame/common/[[:alnum:]\._-]+(/[[:alnum:]\._-]+)*\.cfg\.(cpp|hpp)"$'
+    Priority: 40
+    SortPriority: 40
+  - Regex: '^"dame/common/[[:alnum:]\._-]+(/[[:alnum:]\._-]+)*\.fwd\.(cpp|hpp)"$'
+    Priority: 40
+    SortPriority: 41
+  - Regex: '^"dame/common/[[:alnum:]\._-]+(/[[:alnum:]\._-]+)*\.(cpp|hpp)"$'
+    Priority: 40
+    SortPriority: 42
+  - Regex: '^"dame/(cpu|sync)/[[:alnum:]\._-]+(/[[:alnum:]\._-]+)*\.cfg\.(cpp|hpp)"$'
+    Priority: 50
+    SortPriority: 50
+  - Regex: '^"dame/(cpu|sync)/[[:alnum:]\._-]+(/[[:alnum:]\._-]+)*\.fwd\.(cpp|hpp)"$'
+    Priority: 50
+    SortPriority: 51
+  - Regex: '^"dame/(cpu|sync)/[[:alnum:]\._-]+(/[[:alnum:]\._-]+)*\.(cpp|hpp)"$'
+    Priority: 50
+    SortPriority: 52
+  - Regex: '^"dame(/[[:alnum:]\._-]+){2,}\.cfg\.(cpp|hpp)"$'
+    Priority: 60
+    SortPriority: 60
+  - Regex: '^"dame(/[[:alnum:]\._-]+){2,}\.fwd\.(cpp|hpp)"$'
+    Priority: 60
+    SortPriority: 61
+  - Regex: '^"dame(/[[:alnum:]\._-]+){2,}\.(cpp|hpp)"$'
+    Priority: 60
+    SortPriority: 62
+IndentCaseLabels: false
+IndentPPDirectives: BeforeHash
+IndentWrappedFunctionNames: false
+InsertTrailingCommas: Wrapped
+KeepEmptyLinesAtTheStartOfBlocks: true
+LambdaBodyIndentation: Signature
+Language: Cpp
+MaxEmptyLinesToKeep: 2
+NamespaceIndentation: All
+# TODO Declare all namespace macros for Catch2 v3
+# NamespaceMacros:
+PenaltyReturnTypeOnItsOwnLine: 0
+PointerAlignment: Left
+# QualifierOrder:
+#   - constexpr
+#   - static
+#   - inline
+#   - type
+#   - const
+#   - volatile
+#   - restrict
+ReferenceAlignment: Pointer
+ReflowComments: true
+#RequiresClausePosition: OwnLine  # requires clang-format 15
+SeparateDefinitionBlocks: Always  # requires clang-format v14
+SortIncludes: true
+SortUsingDeclarations: true
+SpaceAfterCStyleCast: true
+SpaceAfterTemplateKeyword: true
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCpp11BracedList: true
+SpaceBeforeCtorInitializerColon: true
+SpaceBeforeInheritanceColon: true
+SpaceBeforeParens: ControlStatements
+SpaceBeforeRangeBasedForLoopColon: true
+SpaceBeforeSquareBrackets: false
+SpacesBeforeTrailingComments: 2

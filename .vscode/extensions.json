@@ -1,0 +1,22 @@
+{
+  "recommendations": [
+    "jeff-hykin.better-cpp-syntax",
+    "ms-vscode.cmake-tools",
+    "ms-vscode.cpptools-extension-pack",
+    "marus25.cortex-debug",
+    "ms-vscode-remote.remote-containers",
+    "ms-azuretools.vscode-docker",
+    "betwo.vscode-doxygen-runner",
+    "editorconfig.editorconfig",
+    "nordic-semiconductor.nrf-devicetree",
+    "nordic-semiconductor.nrf-kconfig",
+    "nordic-semiconductor.nrf-terminal",
+    "mcu-debug.rtos-views",
+    "redhat.vscode-yaml",
+    "dbaeumer.vscode-eslint",
+    "ms-python.isort",
+    "ms-python.python",
+    "njpwerner.autodocstring",
+    "wholroyd.jinja"
+  ]
+}

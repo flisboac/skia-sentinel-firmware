@@ -1,0 +1,77 @@
+sh# Project stuff
+bin
+build
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# CMake
+CMakeLists.txt.user
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# KDevelop
+.kdev4
+*.kdev4
+
+# Eclipse
+.cproject
+.project
+.settings
+
+# CLion
+.idea
+cmake-build-*
+
+# VSCode
+/.vscode/
+
+# Local stuff
+local
+/temp/
+*.bkp
+
+# JavaScript scripts' dependencies
+node_modules
+
+# Python stuff
+__pycache__
+__pymodules__
+*.pyo
+*.pyc
+/.ycm_extra_conf.py
+.mypy_cache
+venv/
+
+# Zephyr-related stuff
+/bootloader
+/modules
+/tools
+/zephyr
+/skia-config
+/build
