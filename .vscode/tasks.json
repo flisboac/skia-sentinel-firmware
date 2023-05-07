@@ -23,6 +23,12 @@
       "type": "shell",
       "command": "cd app && west debug",
       "group": "test"
+    },
+    {
+      "label": "Listen (ESP32*)",
+      "type": "shell",
+      "command": "cd app && west espressif monitor",
+      "group": "test"
     }
   ]
 }
