@@ -1,0 +1,28 @@
+/ {
+  // chosen {
+  //   zephyr,sram = &sram0;
+  //   zephyr,console = &usb_serial;
+  //   zephyr,shell-uart = &usb_serial;
+  //   zephyr,flash = &flash0;
+  // };
+
+  aliases {
+    sensor-th = &sht30;
+    sensor-thp = &bme680;
+  };
+};
+
+&i2c0 {
+  clock-frequency = < 400000 >;
+
+  sht30: sht30@45 {
+    compatible = "sensirion,sht3xd";
+    status = "okay";
+    reg = < 0x45 >;
+  };
+
+	bme680: bme680@77 {
+		compatible = "bosch,bme680";
+		reg = <0x77>;
+	};
+};
