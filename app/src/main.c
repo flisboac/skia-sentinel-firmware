@@ -55,7 +55,7 @@ int main(void)
         th_ready = false;
         measure_th_(dev_th);
         measure_thp_(dev_thp);
-        measure_voc_eco2_();
+        measure_voc_eco2_(dev_thp);
         k_msleep(SLEEP_TIME_MS);
     }
 
@@ -65,6 +65,7 @@ int main(void)
 void measure_th_(const struct device* const dev)
 {
     int rc;
+    struct sensor_value temp, hum;
 
     rc = sensor_sample_fetch(dev);
     if (rc == 0) { rc = sensor_channel_get(dev, SENSOR_CHAN_AMBIENT_TEMP, &temp); }
@@ -91,7 +92,7 @@ void measure_thp_(const struct device* const dev)
     if (rc == 0) {
         th_ready = true;
         curr_temp = temp;
-        curr_hum = hum;
+        curr_hum = humidity;
         printf(
             "BMP680: T = %d.%06d C; P = %d.%06d kPa; H = %d.%06d %%; G = %d.%06d R\n",
             temp.val1,
