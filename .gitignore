@@ -69,6 +69,7 @@ __pymodules__
 venv/
 
 # Zephyr-related stuff
+.west
 /bootloader
 /modules
 /tools
