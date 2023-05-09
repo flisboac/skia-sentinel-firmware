@@ -10,6 +10,7 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/kernel.h>
+#include <zephyr/drivers/sensor/ens160.h>
 
 /* 1000 msec = 1 sec */
 #define SLEEP_TIME_MS 2000
@@ -37,17 +38,28 @@ int main(void)
 
     printk("initializing...\n");
 
+    const struct device* const dev_voc_eco2 = DEVICE_DT_GET_ONE(sciosense_ens160);
     const struct device* const dev_th = DEVICE_DT_GET_ONE(sensirion_sht3xd);
     const struct device* const dev_thp = DEVICE_DT_GET_ONE(bosch_bme680);
     int rc;
 
+    k_msleep(SLEEP_TIME_MS);
+
+    printf("Is device %s ready?\n", dev_th->name);
     if (!device_is_ready(dev_th)) {
         printf("Device %s is not ready\n", dev_th->name);
         return 0;
     }
 
+    printf("Is device %s ready?\n", dev_thp->name);
     if (!device_is_ready(dev_thp)) {
         printf("Device %s is not ready\n", dev_thp->name);
+        return 0;
+    }
+
+    printf("Is device %s ready?\n", dev_voc_eco2->name);
+    if (!device_is_ready(dev_voc_eco2)) {
+        printf("Device %s is not ready\n", dev_voc_eco2->name);
         return 0;
     }
 
@@ -55,8 +67,9 @@ int main(void)
         th_ready = false;
         measure_th_(dev_th);
         measure_thp_(dev_thp);
-        measure_voc_eco2_(dev_thp);
+        measure_voc_eco2_(dev_voc_eco2);
         k_msleep(SLEEP_TIME_MS);
+        printk("sleeping...\n");
     }
 
     return 0;
@@ -71,7 +84,7 @@ void measure_th_(const struct device* const dev)
     if (rc == 0) { rc = sensor_channel_get(dev, SENSOR_CHAN_AMBIENT_TEMP, &temp); }
     if (rc == 0) { rc = sensor_channel_get(dev, SENSOR_CHAN_HUMIDITY, &hum); }
     if (rc != 0) {
-        printf("SHT3XD: failed: %d\n", rc);
+        printf("Failed to get measurements from sensor %s!\n", dev->name);
         return;
     }
 
@@ -105,10 +118,72 @@ void measure_thp_(const struct device* const dev)
             gas_res.val2
         );
     } else {
-        printf("Failed to get measurements from sensor %s!", dev->name);
+        printf("Failed to get measurements from sensor %s!\n", dev->name);
     }
 }
 
 void measure_voc_eco2_(const struct device* const dev)
 {
+    int rc;
+    struct sensor_value tvoc, eco2, aqi_uba, part_id, fw_major, fw_minor, fw_build, opmode, status;
+    struct sensor_value hp0_bl, hp1_bl, hp2_bl, hp3_bl, hp0_rs, hp1_rs, hp2_rs, hp3_rs;
+
+    rc = sensor_sample_fetch(dev);
+    if (rc == 0) rc = sensor_channel_get(dev, SENSOR_CHAN_ENS160_REG_STATUS, &status);
+    if (rc == 0) rc = sensor_channel_get(dev, SENSOR_CHAN_VOC, &tvoc);
+    if (rc == 0) rc = sensor_channel_get(dev, SENSOR_CHAN_CO2, &eco2);
+    if (rc == 0) rc = sensor_channel_get(dev, SENSOR_CHAN_ENS160_AQI_UBA, &aqi_uba);
+    if (rc == 0) rc = sensor_channel_get(dev, SENSOR_CHAN_ENS160_PART_ID, &part_id);
+    if (rc == 0) rc = sensor_channel_get(dev, SENSOR_CHAN_ENS160_REVISION_MAJOR, &fw_major);
+    if (rc == 0) rc = sensor_channel_get(dev, SENSOR_CHAN_ENS160_REVISION_MINOR, &fw_minor);
+    if (rc == 0) rc = sensor_channel_get(dev, SENSOR_CHAN_ENS160_REVISION_BUILD, &fw_build);
+    if (rc == 0) rc = sensor_channel_get(dev, SENSOR_CHAN_ENS160_OPMODE, &opmode);
+    if (rc == 0) rc = sensor_channel_get(dev, SENSOR_CHAN_ENS160_HOTPLATE0_BASELINE, &hp0_bl);
+    if (rc == 0) rc = sensor_channel_get(dev, SENSOR_CHAN_ENS160_HOTPLATE1_BASELINE, &hp1_bl);
+    if (rc == 0) rc = sensor_channel_get(dev, SENSOR_CHAN_ENS160_HOTPLATE2_BASELINE, &hp2_bl);
+    if (rc == 0) rc = sensor_channel_get(dev, SENSOR_CHAN_ENS160_HOTPLATE3_BASELINE, &hp3_bl);
+    if (rc == 0) rc = sensor_channel_get(dev, SENSOR_CHAN_ENS160_HOTPLATE0_RESISTANCE, &hp0_rs);
+    if (rc == 0) rc = sensor_channel_get(dev, SENSOR_CHAN_ENS160_HOTPLATE1_RESISTANCE, &hp1_rs);
+    if (rc == 0) rc = sensor_channel_get(dev, SENSOR_CHAN_ENS160_HOTPLATE2_RESISTANCE, &hp2_rs);
+    if (rc == 0) rc = sensor_channel_get(dev, SENSOR_CHAN_ENS160_HOTPLATE3_RESISTANCE, &hp3_rs);
+
+    if (rc == 0) {
+        printf(
+            "ens160_sample_fetch: sensor '%s': status = %d, part_id = %d, major = %d, minor = %d, build = %d, opmode = %d\n",
+            dev->name,
+            status.val1,
+            part_id.val1,
+            fw_major.val1,
+            fw_minor.val1,
+            fw_build.val1,
+            opmode.val1
+        );
+
+        printf(
+            "ENS160: TVOC = %d.%06d ppb; eCO2 = %d.%06d ppm; AQI-UBA: %d\n",
+            tvoc.val1,
+            tvoc.val2,
+            eco2.val1,
+            eco2.val2,
+            aqi_uba.val1
+        );
+        printf(
+            "ENS160: HP0_BL = %d; HP1_BL = %d; HP2_BL = %d; HP3_BL = %d; \n",
+            hp0_bl.val1,
+            hp1_bl.val1,
+            hp2_bl.val1,
+            hp3_bl.val1
+        );
+        printf(
+            "ENS160: HP0_RS = %d; HP1_RS = %d; HP2_RS = %d; HP3_RS = %d; \n",
+            hp0_rs.val1,
+            hp1_rs.val1,
+            hp2_rs.val1,
+            hp3_rs.val1
+        );
+    } else {
+        sensor_channel_get(dev, SENSOR_CHAN_ENS160_REG_STATUS, &status);
+        sensor_channel_get(dev, SENSOR_CHAN_ENS160_OPMODE, &opmode);
+        printf("Failed to get measurements from sensor %s, error code %d, opmode = %d, status = %d!\n", dev->name, rc, opmode.val1, status.val1);
+    }
 }

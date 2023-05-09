@@ -9,3 +9,7 @@ manifest:
       revision: 7a946450e51e9b92c99c4326eb2f092e420ba64f
       import: true
       west-commands: scripts/west-commands.yml
+      path: ext/zephyr
+
+self:
+  path: .

@@ -27,8 +27,13 @@
     {
       "label": "Listen (ESP32*)",
       "type": "shell",
-      "command": "cd app && west espressif monitor",
-      "group": "test"
+      "command": "cd app && west espressif monitor --port=\"${ESPTOOL_PORT}\"",
+      "group": "test",
+      "options": {
+        "env": {
+          "ESPTOOL_PORT": "/dev/ttyACM0"
+        }
+      }
     }
   ]
 }

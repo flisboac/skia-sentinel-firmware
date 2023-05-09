@@ -1,14 +1,8 @@
 / {
-  // chosen {
-  //   zephyr,sram = &sram0;
-  //   zephyr,console = &usb_serial;
-  //   zephyr,shell-uart = &usb_serial;
-  //   zephyr,flash = &flash0;
-  // };
-
   aliases {
     sensor-th = &sht30;
     sensor-thp = &bme680;
+    sensor-tvoc = &ens160;
   };
 };
 
@@ -23,6 +17,13 @@
 
 	bme680: bme680@77 {
 		compatible = "bosch,bme680";
+    status = "okay";
 		reg = <0x77>;
+	};
+
+	ens160: ens160@53 {
+    compatible = "sciosense,ens160";
+    status = "okay";
+		reg = <0x53>;
 	};
 };

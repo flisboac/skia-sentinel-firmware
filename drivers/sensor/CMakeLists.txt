@@ -1,0 +1,1 @@
+add_subdirectory_ifdef(CONFIG_ENS160 ens160)

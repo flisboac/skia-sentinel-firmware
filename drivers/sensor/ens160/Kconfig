@@ -1,0 +1,15 @@
+# ENS160 temperature, pressure, humidity and gas sensor configuration options
+
+# Copyright (c) 2018 Bosch Sensortec GmbH
+# Copyright (c) 2022, Leonard Pollak
+#
+# SPDX-License-Identifier: Apache-2.0
+
+menuconfig ENS160
+	bool "ENS160 Digital Metal-Oxide Multi-Gas Sensor"
+	default y
+	depends on DT_HAS_SCIOSENSE_ENS160_ENABLED
+	select I2C if $(dt_compat_on_bus,$(DT_COMPAT_SCIOSENSE_ENS160),i2c)
+	select SPI if $(dt_compat_on_bus,$(DT_COMPAT_SCIOSENSE_ENS160),spi)
+	help
+	  Enable driver for ENS160 I2C- or SPI- based TVOC, eCO2 and AQI-UBA and gas sensor.

@@ -12,20 +12,15 @@ get_filename_component(
   ABSOLUTE
 )
 
-list(APPEND BOARD_ROOT ${APPLICATION_PROJECT_DIR})
-list(APPEND DTS_ROOT ${APPLICATION_PROJECT_DIR})
+# list(APPEND BOARD_ROOT ${PROJECT_ROOT})
+# list(APPEND BOARD_ROOT ${APPLICATION_PROJECT_DIR})
+# list(APPEND DTS_ROOT ${PROJECT_ROOT})
+include_directories(${APPLICATION_PROJECT_DIR}/include)
+include_directories(${PROJECT_ROOT}/include)
 
 message("ZephyrBuildConfig: ZEPHYR_BASE = ${ZEPHYR_BASE}")
 message("ZephyrBuildConfig: PROJECT_ROOT = ${PROJECT_ROOT}")
 message("ZephyrBuildConfig: APPLICATION_PROJECT_DIR = ${APPLICATION_PROJECT_DIR}")
 message("ZephyrBuildConfig: BOARD_ROOT = ${BOARD_ROOT}")
 message("ZephyrBuildConfig: DTS_ROOT = ${DTS_ROOT}")
-
-# if(NOT ENV{ZEPHYR_TOOLCHAIN_VARIANT})
-#     set(ZEPHYR_TOOLCHAIN_VARIANT gnuarmemb)
-#     find_program(GNU_ARM_GCC arm-none-eabi-gcc)
-#     if(NOT ${GNU_ARM_GCC} STREQUAL GNU_ARM_GCC-NOTFOUND)
-#         # The toolchain root is located above the path to the compiler.
-#         get_filename_component(GNUARMEMB_TOOLCHAIN_PATH ${GNU_ARM_GCC}/../.. ABSOLUTE)
-#     endif()
-# endif()
+message("ZephyrBuildConfig: ZEPHYR_SKIA_FIRMWARE_CMAKE_DIR = ${ZEPHYR_SKIA_FIRMWARE_CMAKE_DIR}")

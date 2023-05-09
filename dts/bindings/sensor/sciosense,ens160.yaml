@@ -1,0 +1,16 @@
+# Copyright (c) 2018, Linaro Limited
+# SPDX-License-Identifier: Apache-2.0
+
+description: ENS160 Digital Metal-Oxide Multi-Gas Sensor
+
+compatible: "sciosense,ens160"
+
+include: [sensor-device.yaml, i2c-device.yaml]
+
+properties:
+  irq-gpios:
+    type: phandle-array
+    description: |
+      The INTn pin signals that a new reading is available.  The
+      sensor generates an active-low level signal which remains
+      asserted until the data is read.

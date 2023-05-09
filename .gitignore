@@ -55,6 +55,7 @@ cmake-build-*
 local
 /temp/
 *.bkp
+*.log
 
 # JavaScript scripts' dependencies
 node_modules
@@ -72,10 +73,10 @@ venv/
 .env
 .env.*
 !.env.*.sample
+/ext/zephyr
 .west
 /bootloader
 /modules
 /tools
-/zephyr
 /skia-config
 /build

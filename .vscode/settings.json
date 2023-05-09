@@ -10,5 +10,5 @@
   "search.exclude": {
     "zephyr/**": false,
   },
-  "devicetree.zephyr": "${workspaceFolder}/zephyr"
+  "devicetree.zephyr": "${workspaceFolder}/ext/zephyr"
 }
