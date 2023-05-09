@@ -2,16 +2,54 @@
 #define ZEPHYR_INCLUDE_DRIVERS_SENSOR_ENS160_H_
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
 #include <zephyr/drivers/sensor.h>
 
-#define SENSOR_VALUE_ENS160_OPMODE_V(opmode) { .val1 = opmode, .val2 = 0 }
-#define SENSOR_VALUE_ENS160_SET_OPMODE(val, opmode) do { (val)->val1 = opmode; (val)->val2 = 0; } while (0)
+#define SENSOR_VALUE_ENS160_OPMODE_V(opmode) \
+    { \
+        .val1 = opmode, .val2 = 0 \
+    }
+#define SENSOR_VALUE_ENS160_SET_OPMODE(val, opmode) \
+    do { \
+        (val)->val1 = opmode; \
+        (val)->val2 = 0; \
+    } \
+    while (0)
 #define SENSOR_VALUE_ENS160_TO_OPMODE(val) ((enum sensor_value_ens160_opmode)((val)->val1))
 
-enum sensor_value_ens160_opmode {
+#define SENSOR_ENS160_STATUS_OPMODE_RUNNING (0x80)
+#define SENSOR_ENS160_STATUS_OPMODE_ERROR (0x40)
+#define SENSOR_ENS160_STATUS_SIGNAL_VALIDITY (0x0C)
+#define SENSOR_ENS160_STATUS_NEW_DATA (0x02)
+#define SENSOR_ENS160_STATUS_NEW_GPR (0x01)
+
+#define SENSOR_ENS160_STATUS_OUTPUT_OK (0)
+#define SENSOR_ENS160_STATUS_WARMING_UP (1)
+#define SENSOR_ENS160_STATUS_INITIAL_STARTUP (2)
+#define SENSOR_ENS160_STATUS_OUTPUT_INVALID (3)
+
+#define BIT_CHECK_SENSOR_ENS160(status, flags) ((status) == ((status) & (flags)))
+#define GET_SENSOR_ENS160_SIGNAL_VALIDITY(status) (((status) & SENSOR_ENS160_STATUS_SIGNAL_VALIDITY) >> 2)
+
+#define IS_SENSOR_ENS160_OPMODE_RUNNING(status) BIT_CHECK_SENSOR_ENS160(status, SENSOR_ENS160_STATUS_OPMODE_RUNNING)
+#define IS_SENSOR_ENS160_OPMODE_ERROR(status) BIT_CHECK_SENSOR_ENS160(status, SENSOR_ENS160_STATUS_OPMODE_ERROR)
+#define IS_SENSOR_ENS160_NEW_DATA(status) BIT_CHECK_SENSOR_ENS160(status, SENSOR_ENS160_STATUS_NEW_DATA)
+#define IS_SENSOR_ENS160_NEW_GPR(status) BIT_CHECK_SENSOR_ENS160(status, SENSOR_ENS160_STATUS_NEW_GPR)
+
+#define IS_SENSOR_ENS160_OUTPUT_OK(status) \
+    (GET_SENSOR_ENS160_SIGNAL_VALIDITY(status) == SENSOR_ENS160_STATUS_OUTPUT_OK)
+#define IS_SENSOR_ENS160_WARMING_UP(status) \
+    (GET_SENSOR_ENS160_SIGNAL_VALIDITY(status) == SENSOR_ENS160_STATUS_WARMING_UP)
+#define IS_SENSOR_ENS160_INITIAL_STARTUP(status) \
+    (GET_SENSOR_ENS160_SIGNAL_VALIDITY(status) == SENSOR_ENS160_STATUS_INITIAL_STARTUP)
+#define IS_SENSOR_ENS160_OUTPUT_INVALID(status) \
+    (GET_SENSOR_ENS160_SIGNAL_VALIDITY(status) == SENSOR_ENS160_STATUS_OUTPUT_INVALID)
+
+enum sensor_value_ens160_opmode
+{
     SENSOR_ENS160_OPMODE_UNKNOWN = 0x1FF,
     SENSOR_ENS160_OPMODE_DEEP_SLEEP = 0x00,
     SENSOR_ENS160_OPMODE_IDLE = 0x01,
@@ -21,13 +59,8 @@ enum sensor_value_ens160_opmode {
     SENSOR_ENS160_OPMODE_RESET = 0xF0
 };
 
-#define SENSOR_ENS160_STATUS_OPMODE_RUNNING 0x80
-#define SENSOR_ENS160_STATUS_OPMODE_ERROR 0x40
-#define SENSOR_ENS160_STATUS_VALIDITY 0x0C
-#define SENSOR_ENS160_STATUS_NEW_DATA 0x02
-#define SENSOR_ENS160_STATUS_NEW_GPR 0x01
-
-enum sensor_channel_ens160 {
+enum sensor_channel_ens160
+{
     /** Part ID. */
     SENSOR_CHAN_ENS160_PART_ID = SENSOR_CHAN_PRIV_START,
     /** Major revision. */
@@ -38,12 +71,12 @@ enum sensor_channel_ens160 {
     SENSOR_CHAN_ENS160_REVISION_BUILD,
 
     /** GE-UPA (German Environmental Agency, Umweltbundesamt) Air quality index (1-5). */
-	SENSOR_CHAN_ENS160_AQI_UBA,
+    SENSOR_CHAN_ENS160_AQI_UBA,
     /** US-EPA (U.S. Environmental Protection Agency) Air quality index (0-500). */
-	SENSOR_CHAN_ENS160_AQI_EPA,
+    SENSOR_CHAN_ENS160_AQI_EPA,
 
     /** Sensor's current operational status. */
-	SENSOR_CHAN_ENS160_REG_STATUS,
+    SENSOR_CHAN_ENS160_REG_STATUS,
 
     /** Configures/sets the current operational mode. */
     SENSOR_CHAN_ENS160_OPMODE,
@@ -69,7 +102,8 @@ enum sensor_channel_ens160 {
     SENSOR_CHAN_ENS160_HOTPLATE3_RESISTANCE,
 };
 
-enum sensor_attribute_ens160 {
+enum sensor_attribute_ens160
+{
     /** Indicates how many steps there are in the custom mode. */
     SENSOR_ATTR_ENS160_CUSTOM_STEP_COUNT = SENSOR_ATTR_PRIV_START,
 
@@ -94,7 +128,8 @@ enum sensor_attribute_ens160 {
     /** Hotplate 3 Temperature. */
     SENSOR_ATTR_ENS160_CUSTOM_HOTPLATE3_TEMPERATURE,
 
-    /** Commits the current step configuration (e.g. sends the custom step to the device), and sets up the next step. */
+    /** Commits the current step configuration (e.g. sends the custom step to the device), and sets up the next
+         step. */
     SENSOR_ATTR_ENS160_CUSTOM_STEP_NEXT,
 };
 

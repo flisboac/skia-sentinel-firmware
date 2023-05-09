@@ -584,15 +584,15 @@ static int ens160_sample_fetch(const struct device* dev, enum sensor_channel cha
 
     switch ((int) chan) {
     case SENSOR_CHAN_ALL:
-        err = ens160_get_opmode(dev);
-        if (err) { return err; }
-        err = ens160_get_sensor_status(dev);
-        if (err) { return err; }
         err = ens160_begin_measurement_cycle(dev, SENSOR_ENS160_STATUS_NEW_DATA | SENSOR_ENS160_STATUS_NEW_GPR);
         if (err) { return err; }
         err = ens160_read_data(dev);
         if (err) { return err; }
         err = ens160_read_gpr(dev);
+        if (err) { return err; }
+        err = ens160_get_sensor_status(dev);
+        if (err) { return err; }
+        err = ens160_get_opmode(dev);
         return err;
     case SENSOR_CHAN_VOC:
     case SENSOR_CHAN_CO2:
@@ -600,7 +600,12 @@ static int ens160_sample_fetch(const struct device* dev, enum sensor_channel cha
     case SENSOR_CHAN_ENS160_AQI_EPA:
         err = ens160_begin_measurement_cycle(dev, SENSOR_ENS160_STATUS_NEW_DATA);
         if (err) { return err; }
-        return ens160_read_data(dev);
+        err = ens160_read_data(dev);
+        if (err) { return err; }
+        err = ens160_get_sensor_status(dev);
+        if (err) { return err; }
+        err = ens160_get_opmode(dev);
+        return err;
     case SENSOR_CHAN_ENS160_HOTPLATE0_BASELINE:
     case SENSOR_CHAN_ENS160_HOTPLATE1_BASELINE:
     case SENSOR_CHAN_ENS160_HOTPLATE2_BASELINE:
@@ -611,7 +616,12 @@ static int ens160_sample_fetch(const struct device* dev, enum sensor_channel cha
     case SENSOR_CHAN_ENS160_HOTPLATE3_RESISTANCE:
         err = ens160_begin_measurement_cycle(dev, SENSOR_ENS160_STATUS_NEW_GPR);
         if (err) { return err; }
-        return ens160_read_gpr(dev);
+        err = ens160_read_gpr(dev);
+        if (err) { return err; }
+        err = ens160_get_sensor_status(dev);
+        if (err) { return err; }
+        err = ens160_get_opmode(dev);
+        return err;
     case SENSOR_CHAN_ENS160_REG_STATUS: return ens160_get_sensor_status(dev);
     case SENSOR_CHAN_ENS160_OPMODE: return ens160_get_opmode(dev);
     default: return -EINVAL;
