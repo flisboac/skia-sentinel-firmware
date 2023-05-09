@@ -107,13 +107,6 @@ struct ens160_config
 #define ENS160_COMMAND_SETTH 0x02
 #define ENS160_COMMAND_SETSEQ 0xC2
 
-// #define ENS160_OPMODE_RESET 0xF0
-// #define ENS160_OPMODE_DEP_SLEEP 0x00
-// #define ENS160_OPMODE_IDLE 0x01
-// #define ENS160_OPMODE_STD 0x02
-// #define ENS160_OPMODE_LP 0x03
-// #define ENS160_OPMODE_CUSTOM 0xC0
-
 #define ENS160_BL_CMD_START 0x02
 #define ENS160_BL_CMD_ERASE_APP 0x04
 #define ENS160_BL_CMD_ERASE_BLINE 0x06
@@ -128,16 +121,6 @@ struct ens160_config
 
 #define IS_ENS160_SEQ_ACK_NOT_COMPLETE(x) (ENS160_SEQ_ACK_NOTCOMPLETE == (ENS160_SEQ_ACK_NOTCOMPLETE & (x)))
 #define IS_ENS160_SEQ_ACK_COMPLETE(x) (ENS160_SEQ_ACK_COMPLETE == (ENS160_SEQ_ACK_COMPLETE & (x)))
-
-#define ENS160_DATA_STATUS_STATAS 0x80
-#define ENS160_DATA_STATUS_STATER 0x40
-#define ENS160_DATA_STATUS_VALIDITY 0x0C
-#define ENS160_DATA_STATUS_NEWDAT 0x02
-#define ENS160_DATA_STATUS_NEWGPR 0x01
-
-#define IS_NEWDAT(x) (ENS160_DATA_STATUS_NEWDAT == (ENS160_DATA_STATUS_NEWDAT & (x)))
-#define IS_NEWGPR(x) (ENS160_DATA_STATUS_NEWGPR == (ENS160_DATA_STATUS_NEWGPR & (x)))
-#define IS_NEW_DATA_AVAILABLE(x) (0 != ((ENS160_DATA_STATUS_NEWDAT | ENS160_DATA_STATUS_NEWGPR) & (x)))
 
 #ifndef ENS160_POW
     #ifdef CONFIG_MINIMAL_LIBC
@@ -211,15 +194,19 @@ struct ens160_data
     uint8_t fw_ver_build;
     uint8_t step_count;
     uint8_t aqi_uba;
+    uint8_t sensor_status;
+    uint16_t max_wait_cycles;
     uint16_t part_id;
     uint16_t aqi_epa;
     uint16_t tvoc;
     uint16_t eco2;
     enum sensor_value_ens160_stage stage;
     enum sensor_value_ens160_opmode opmode;
+    enum sensor_value_ens160_opmode measurement_opmode;
     struct ens160_step_config step_config;
     struct sensor_value temp_in;
     struct sensor_value rh_in;
+    k_timeout_t wait_cycle_time;
 
     union
     {

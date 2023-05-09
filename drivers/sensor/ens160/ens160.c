@@ -110,30 +110,10 @@ static int ens160_set_opmode(const struct device* dev, enum sensor_value_ens160_
     return err;
 }
 
-static int ens160_set_valid_measurement_mode(const struct device* dev) {
-    struct ens160_data* data = dev->data;
-    enum sensor_value_ens160_opmode opmode;
-    int err;
-
-    if (!ens160_is_valid_measurement_opmode(dev)) {
-        opmode = SENSOR_ENS160_OPMODE_STANDARD;
-        err = ens160_set_opmode(dev, opmode);
-        if (err) {
-            LOG_ERR("ens160_init: Could not set measurement opmode %d for sensor '%s'; code: %d", opmode, dev->name, err);
-            return err;
-        }
-        ens160_default_wait();
-    }
-
-    return 0;
-}
-
 static int ens160_initialize_custom_opmode(const struct device* dev, uint8_t step_count)
 {
     struct ens160_data* data = dev->data;
     int err;
-
-    if (!step_count) { return -EINVAL; }
 
     err = ens160_set_opmode(dev, SENSOR_ENS160_OPMODE_IDLE);
     if (err) { return err; }
@@ -141,12 +121,25 @@ static int ens160_initialize_custom_opmode(const struct device* dev, uint8_t ste
     err = ens160_clear_command(dev);
     if (err) { return err; }
 
+    if (!step_count) {
+        // Goes back to standard mode for the next measurements.
+
+        data->step_count = step_count;
+        data->stage = SENSOR_ENS160_STAGE_RUNNING;
+        data->measurement_opmode = SENSOR_ENS160_OPMODE_STANDARD;
+        memset(&data->step_config, 0, sizeof(data->step_config));
+
+        return 0;
+    }
+
     err = ens160_reg_write(dev, ENS160_REG_COMMAND, ENS160_COMMAND_SETSEQ);
     if (err) { return err; }
 
     ens160_default_wait();
 
     data->step_count = step_count;
+    data->stage = SENSOR_ENS160_STAGE_CUSTOM_CONFIGURING;
+    data->measurement_opmode = SENSOR_ENS160_OPMODE_CUSTOM;
     memset(&data->step_config, 0, sizeof(data->step_config));
 
     return 0;
@@ -232,7 +225,44 @@ static int ens160_add_custom_opmode_step(const struct device* dev)
 
 static int ens160_reset(const struct device* dev)
 {
-    return ens160_set_opmode(dev, SENSOR_ENS160_OPMODE_RESET);
+    struct ens160_data* data = dev->data;
+    enum sensor_value_ens160_opmode opmode;
+    uint8_t interrupt_flags;
+    int err;
+
+    err = ens160_set_opmode(dev, SENSOR_ENS160_OPMODE_RESET);
+    if (err) {
+        LOG_ERR("ens160_reset: Could not reset sensor '%s'; code: %d", dev->name, err);
+        return err;
+    }
+
+    opmode = SENSOR_ENS160_OPMODE_IDLE;
+    err = ens160_set_opmode(dev, opmode);
+    if (err) {
+        LOG_ERR("ens160_reset: Could not set initial opmode %d for sensor '%s'; code: %d", opmode, dev->name, err);
+        return err;
+    }
+
+    err = ens160_clear_command(dev);
+    if (err) { return err; }
+
+#ifdef CONFIG_ENS160_INTERRUPTS
+    interrupt_flags = 0x0b;
+#else
+    interrupt_flags = 0x00;
+#endif
+
+        err = ens160_reg_write(dev, ENS160_REG_CONFIG, interrupt_flags);
+    if (err) {
+        LOG_ERR("ens160_reset: Could not set up interrupt configuration for sensor '%s'; code: %d", dev->name, err);
+    }
+
+    data->step_count = 0;
+    data->stage = SENSOR_ENS160_STAGE_RUNNING;
+    data->measurement_opmode = SENSOR_ENS160_OPMODE_STANDARD;
+    memset(&data->step_config, 0, sizeof(data->step_config));
+
+    return 0;
 }
 
 static int ens160_get_part_id(const struct device* dev)
@@ -282,6 +312,19 @@ static int ens160_get_firmware_info(const struct device* dev)
     return 0;
 }
 
+static int ens160_get_sensor_status(const struct device* dev)
+{
+    struct ens160_data* data = dev->data;
+    uint8_t status;
+    int err;
+
+    err = ens160_reg_read(dev, ENS160_REG_DATA_STATUS, &status, 1);
+    if (err) { return err; }
+
+    data->sensor_status = status;
+    return 0;
+}
+
 static int ens160_wait_for_status(const struct device* dev, uint8_t expected_type)
 {
 #define IS_NEW (expected_type == (expected_type & status))
@@ -290,11 +333,11 @@ static int ens160_wait_for_status(const struct device* dev, uint8_t expected_typ
     int err;
     uint32_t max_cycles;
 
-    max_cycles = 1000;
-
     if (data->waiting_for_new_data) {
+        max_cycles = data->max_wait_cycles;
+
         do {
-            k_sleep(K_MSEC(1));
+            k_sleep(data->wait_cycle_time);
             err = ens160_reg_read(dev, ENS160_REG_DATA_STATUS, &status, 1);
         }
         while (max_cycles-- && !err && !IS_NEW);
@@ -303,10 +346,55 @@ static int ens160_wait_for_status(const struct device* dev, uint8_t expected_typ
         if (err) { return err; }
     }
 
-    // if (!err && !IS_NEW) { return -EAGAIN; }
+    data->sensor_status = status;
+
+    if (!err && !IS_NEW) { return -EAGAIN; }
 
     return err;
 #undef IS_NEW
+}
+
+static void ens160_warn_incomplete_custom_configuration(const struct device* dev, const char* function_name) {
+    struct ens160_data* data = dev->data;
+
+    if ((int) data->stage != (int) SENSOR_ENS160_STAGE_CUSTOM_CONFIGURING) {
+        LOG_DBG(
+            "%s: sensor '%s': custom mode was not configured; changing the sensor's operation "
+            "mode to CUSTOM at this moment is most likely an user error",
+            function_name,
+            dev->name
+        );
+    } else if (data->step_count > 0) {
+        LOG_DBG(
+            "%s: sensor '%s': custom mode is missing %d step(s); changing the sensor's "
+            "operation mode to CUSTOM at this moment is most likely an user error",
+            function_name,
+            dev->name,
+            data->step_count
+        );
+    }
+}
+
+static int ens160_begin_measurement_cycle(const struct device* dev, uint8_t expected_type)
+{
+    struct ens160_data* data = dev->data;
+    int err;
+
+    ens160_warn_incomplete_custom_configuration(dev, "ens160_begin_measurement_cycle");
+
+    err = ens160_set_opmode(dev, data->measurement_opmode);
+    if (err) { return err; }
+
+    err = ens160_wait_for_status(dev, expected_type);
+    if (err) {
+        if (err != -EAGAIN) { return err; }
+        LOG_DBG(
+            "*** ens160_read_data: sensor '%s': could not detect new information; data may be outdated\n", dev->name
+        );
+        err = 0;
+    }
+
+    return err;
 }
 
 static int ens160_read_data(const struct device* dev)
@@ -315,16 +403,8 @@ static int ens160_read_data(const struct device* dev)
     uint8_t buf[7];
     int err;
 
-    err = ens160_set_valid_measurement_mode(dev);
-    if (err) { return err; }
-
-    err = ens160_wait_for_status(dev, ENS160_DATA_STATUS_NEWDAT);
-    if (err) { return err; }
-
     err = ens160_reg_read(dev, ENS160_REG_DATA_AQI, buf, 7);
     if (err) { return err; }
-
-    printf("ens160_read_data: sensor '%s': buf = { %d, %d, %d, %d, %d, %d, %d }\n", dev->name, buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6]);
 
     data->aqi_uba = buf[0];
     data->tvoc = buf[1] | ((uint16_t) buf[2] << 8);
@@ -346,16 +426,8 @@ static int ens160_read_gpr(const struct device* dev)
     uint8_t status;
     int err;
 
-    err = ens160_set_valid_measurement_mode(dev);
-    if (err) { return err; }
-
-    err = ens160_wait_for_status(dev, ENS160_DATA_STATUS_NEWGPR);
-    if (err) { return err; }
-
     err = ens160_reg_read(dev, ENS160_REG_GPR_READ_0, buf, 8);
     if (err) { return err; }
-
-    printf("ens160_read_gpr: sensor '%s', ENS160_REG_GPR_READ_0: buf = { %d, %d, %d, %d, %d, %d, %d, %d }\n", dev->name, buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]);
 
     data->hotplate0_rs = CONVERT_RS_RAW2OHMS_I((uint32_t) (buf[0] | ((uint16_t) buf[1] << 8)));
     data->hotplate1_rs = CONVERT_RS_RAW2OHMS_I((uint32_t) (buf[2] | ((uint16_t) buf[3] << 8)));
@@ -364,8 +436,6 @@ static int ens160_read_gpr(const struct device* dev)
 
     err = ens160_reg_read(dev, ENS160_REG_DATA_BL, buf, 8);
     if (err) { return err; }
-
-    printf("ens160_read_gpr: sensor '%s', ENS160_REG_DATA_BL: buf = { %d, %d, %d, %d, %d, %d, %d, %d }\n", dev->name, buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]);
 
     data->hotplate0_bl = CONVERT_RS_RAW2OHMS_I((uint32_t) (buf[0] | ((uint16_t) buf[1] << 8)));
     data->hotplate1_bl = CONVERT_RS_RAW2OHMS_I((uint32_t) (buf[2] | ((uint16_t) buf[3] << 8)));
@@ -422,6 +492,7 @@ static int ens160_init(const struct device* dev)
 {
     struct ens160_data* data = dev->data;
     enum sensor_value_ens160_opmode opmode;
+    uint8_t interrupt_flags;
     int err;
 
     LOG_DBG("ens160_init: initializing sensor '%s'...", dev->name);
@@ -429,7 +500,9 @@ static int ens160_init(const struct device* dev)
     data->available = false;
     data->waiting_for_new_data = true;
     data->stage = SENSOR_ENS160_STAGE_UNKNOWN;
+    data->sensor_status = 0;
     data->opmode = SENSOR_ENS160_OPMODE_UNKNOWN;
+    data->measurement_opmode = SENSOR_ENS160_OPMODE_STANDARD;
     data->rev_ens16x = 0;
     data->fw_ver_build = 0;
     data->fw_ver_major = 0;
@@ -440,6 +513,8 @@ static int ens160_init(const struct device* dev)
     data->eco2 = 0;
     data->aqi_uba = 0;
     data->aqi_epa = 0;
+    data->max_wait_cycles = 200;
+    data->wait_cycle_time = K_MSEC(10);
     memset(&data->step_config, 0, sizeof(data->step_config));
     memset(&data->hotplates_rs, 0, sizeof(data->hotplates_rs));
     memset(&data->hotplates_bl, 0, sizeof(data->hotplates_bl));
@@ -473,21 +548,10 @@ static int ens160_init(const struct device* dev)
         return err;
     }
 
-    err = ens160_clear_command(dev);
-    if (err) {
-        LOG_ERR("ens160_init: Could not clear commands for sensor '%s'; code: %d", dev->name, err);
-        return err;
-    }
-
     err = ens160_get_firmware_info(dev);
     if (err) {
         LOG_ERR("ens160_init: Could not get firmware info for sensor '%s'; code: %d", dev->name, err);
         return err;
-    }
-
-    err = ens160_reg_write(dev, ENS160_REG_CONFIG, 0x0b);
-    if (err) {
-        LOG_ERR("ens160_init: Could not set up interrupt configuration for sensor '%s'; code: %d", dev->name, err);
     }
 
     data->stage = SENSOR_ENS160_STAGE_RUNNING;
@@ -522,6 +586,10 @@ static int ens160_sample_fetch(const struct device* dev, enum sensor_channel cha
     case SENSOR_CHAN_ALL:
         err = ens160_get_opmode(dev);
         if (err) { return err; }
+        err = ens160_get_sensor_status(dev);
+        if (err) { return err; }
+        err = ens160_begin_measurement_cycle(dev, SENSOR_ENS160_STATUS_NEW_DATA | SENSOR_ENS160_STATUS_NEW_GPR);
+        if (err) { return err; }
         err = ens160_read_data(dev);
         if (err) { return err; }
         err = ens160_read_gpr(dev);
@@ -530,15 +598,8 @@ static int ens160_sample_fetch(const struct device* dev, enum sensor_channel cha
     case SENSOR_CHAN_CO2:
     case SENSOR_CHAN_ENS160_AQI_UBA:
     case SENSOR_CHAN_ENS160_AQI_EPA:
-        if (!ens160_is_valid_measurement_opmode(dev)) {
-            LOG_ERR(
-                "ens160_sample_fetch: sensor '%s' is currently in an invalid operation mode '%d', cannot fetch samples "
-                "right now.",
-                dev->name,
-                data->stage
-            );
-            return -EINVAL;
-        }
+        err = ens160_begin_measurement_cycle(dev, SENSOR_ENS160_STATUS_NEW_DATA);
+        if (err) { return err; }
         return ens160_read_data(dev);
     case SENSOR_CHAN_ENS160_HOTPLATE0_BASELINE:
     case SENSOR_CHAN_ENS160_HOTPLATE1_BASELINE:
@@ -548,16 +609,10 @@ static int ens160_sample_fetch(const struct device* dev, enum sensor_channel cha
     case SENSOR_CHAN_ENS160_HOTPLATE1_RESISTANCE:
     case SENSOR_CHAN_ENS160_HOTPLATE2_RESISTANCE:
     case SENSOR_CHAN_ENS160_HOTPLATE3_RESISTANCE:
-        if (!ens160_is_valid_measurement_opmode(dev)) {
-            LOG_ERR(
-                "ens160_sample_fetch: sensor '%s' is currently in an invalid operation mode '%d', cannot fetch samples "
-                "right now.",
-                dev->name,
-                data->stage
-            );
-            return -EINVAL;
-        }
+        err = ens160_begin_measurement_cycle(dev, SENSOR_ENS160_STATUS_NEW_GPR);
+        if (err) { return err; }
         return ens160_read_gpr(dev);
+    case SENSOR_CHAN_ENS160_REG_STATUS: return ens160_get_sensor_status(dev);
     case SENSOR_CHAN_ENS160_OPMODE: return ens160_get_opmode(dev);
     default: return -EINVAL;
     }
@@ -566,7 +621,6 @@ static int ens160_sample_fetch(const struct device* dev, enum sensor_channel cha
 static int ens160_channel_get(const struct device* dev, enum sensor_channel chan, struct sensor_value* val)
 {
     struct ens160_data* data = dev->data;
-    uint8_t buf1;
     int err;
 
     if (!data->available) {
@@ -664,10 +718,8 @@ static int ens160_channel_get(const struct device* dev, enum sensor_channel chan
         val->val2 = 0;
         break;
     case SENSOR_CHAN_ENS160_REG_STATUS:
-        val->val1 = val->val2 = 0;
-        err = ens160_reg_read(dev, ENS160_REG_DATA_STATUS, &buf1, 1);
-        if (err) { return err; }
-        val->val1 = buf1;
+        val->val1 = data->sensor_status;
+        val->val2 = 0;
         break;
     default: return -EINVAL;
     }
@@ -725,32 +777,22 @@ static int ens160_attr_set_opmode(const struct device* dev, enum sensor_value_en
     struct ens160_data* data = dev->data;
     int err;
 
-    if ((int) opmode == (int) SENSOR_ENS160_OPMODE_CUSTOM) {
-        if ((int) opmode != (int) SENSOR_ENS160_STAGE_CUSTOM_CONFIGURING) {
-            LOG_DBG(
-                "ens160_attr_set_opmode: sensor '%s': custom mode was not configured; changing the sensor's operation "
-                "mode to CUSTOM at this moment is most likely an user error",
-                dev->name
-            );
-        } else if (data->step_count > 0) {
-            LOG_DBG(
-                "ens160_attr_set_opmode: sensor '%s': custom mode is missing %d step(s); changing the sensor's "
-                "operation mode to CUSTOM at this moment is most likely an user error",
-                dev->name,
-                data->step_count
-            );
-        }
+    switch ((int) opmode) {
+    case SENSOR_ENS160_OPMODE_DEEP_SLEEP:
+    case SENSOR_ENS160_OPMODE_IDLE:
+    case SENSOR_ENS160_OPMODE_LP:
+    case SENSOR_ENS160_OPMODE_STANDARD: break;
+    case SENSOR_ENS160_OPMODE_RESET: return ens160_reset(dev);
+    case SENSOR_ENS160_OPMODE_CUSTOM:
+        ens160_warn_incomplete_custom_configuration(dev, "ens160_attr_set_opmode");
+        break;
+    default: return -EINVAL;
     }
 
     err = ens160_set_opmode(dev, opmode);
     if (err) { return err; }
 
     data->stage = SENSOR_ENS160_STAGE_RUNNING;
-
-    // if (opmode == SENSOR_ENS160_OPMODE_RESET) {
-    // 	data->step_count = 0;
-    // 	memset(&data->step_config, 0, sizeof(data->step_config));
-    // }
 
     return 0;
 }

@@ -8,11 +8,11 @@ extern "C" {
 #include <zephyr/drivers/sensor.h>
 
 #define SENSOR_VALUE_ENS160_OPMODE_V(opmode) { .val1 = opmode, .val2 = 0 }
-#define SENSOR_VALUE_ENS160_SET_OPMODE(val, opmode) do { val->val1 = opmode; } while (0)
-#define SENSOR_VALUE_ENS160_TO_OPMODE(val) ((enum sensor_value_ens160_opmode)val->val1)
+#define SENSOR_VALUE_ENS160_SET_OPMODE(val, opmode) do { (val)->val1 = opmode; (val)->val2 = 0; } while (0)
+#define SENSOR_VALUE_ENS160_TO_OPMODE(val) ((enum sensor_value_ens160_opmode)((val)->val1))
 
 enum sensor_value_ens160_opmode {
-    SENSOR_ENS160_OPMODE_UNKNOWN = 0x100,
+    SENSOR_ENS160_OPMODE_UNKNOWN = 0x1FF,
     SENSOR_ENS160_OPMODE_DEEP_SLEEP = 0x00,
     SENSOR_ENS160_OPMODE_IDLE = 0x01,
     SENSOR_ENS160_OPMODE_STANDARD = 0x02,
@@ -20,6 +20,12 @@ enum sensor_value_ens160_opmode {
     SENSOR_ENS160_OPMODE_CUSTOM = 0xC0,
     SENSOR_ENS160_OPMODE_RESET = 0xF0
 };
+
+#define SENSOR_ENS160_STATUS_OPMODE_RUNNING 0x80
+#define SENSOR_ENS160_STATUS_OPMODE_ERROR 0x40
+#define SENSOR_ENS160_STATUS_VALIDITY 0x0C
+#define SENSOR_ENS160_STATUS_NEW_DATA 0x02
+#define SENSOR_ENS160_STATUS_NEW_GPR 0x01
 
 enum sensor_channel_ens160 {
     /** Part ID. */
@@ -36,10 +42,10 @@ enum sensor_channel_ens160 {
     /** US-EPA (U.S. Environmental Protection Agency) Air quality index (0-500). */
 	SENSOR_CHAN_ENS160_AQI_EPA,
 
-    /** US-EPA (U.S. Environmental Protection Agency) Air quality index (0-500). */
+    /** Sensor's current operational status. */
 	SENSOR_CHAN_ENS160_REG_STATUS,
 
-    /** Gets the current custom mode. */
+    /** Configures/sets the current operational mode. */
     SENSOR_CHAN_ENS160_OPMODE,
     /** Used to configure custom mode. */
     SENSOR_CHAN_ENS160_OPMODE_CUSTOM,

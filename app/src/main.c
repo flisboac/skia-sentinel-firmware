@@ -128,6 +128,15 @@ void measure_voc_eco2_(const struct device* const dev)
     struct sensor_value tvoc, eco2, aqi_uba, part_id, fw_major, fw_minor, fw_build, opmode, status;
     struct sensor_value hp0_bl, hp1_bl, hp2_bl, hp3_bl, hp0_rs, hp1_rs, hp2_rs, hp3_rs;
 
+    if (th_ready) {
+        rc = sensor_attr_set(dev, SENSOR_CHAN_AMBIENT_TEMP, 0, &curr_temp);
+        if (rc == 0) sensor_attr_set(dev, SENSOR_CHAN_HUMIDITY, 0, &curr_hum);
+
+        if (rc != 0) {
+            printf("ENS160: Failed to setup temperature and humidity! Code: %d\n", rc);
+        }
+    }
+
     rc = sensor_sample_fetch(dev);
     if (rc == 0) rc = sensor_channel_get(dev, SENSOR_CHAN_ENS160_REG_STATUS, &status);
     if (rc == 0) rc = sensor_channel_get(dev, SENSOR_CHAN_VOC, &tvoc);
@@ -148,19 +157,20 @@ void measure_voc_eco2_(const struct device* const dev)
     if (rc == 0) rc = sensor_channel_get(dev, SENSOR_CHAN_ENS160_HOTPLATE3_RESISTANCE, &hp3_rs);
 
     if (rc == 0) {
-        printf(
-            "ens160_sample_fetch: sensor '%s': status = %d, part_id = %d, major = %d, minor = %d, build = %d, opmode = %d\n",
-            dev->name,
-            status.val1,
-            part_id.val1,
-            fw_major.val1,
-            fw_minor.val1,
-            fw_build.val1,
-            opmode.val1
-        );
+        // printf(
+        //     "ENS160: sensor '%s': status = %d, part_id = %d, major = %d, minor = %d, build = %d, opmode = %d\n",
+        //     dev->name,
+        //     status.val1,
+        //     part_id.val1,
+        //     fw_major.val1,
+        //     fw_minor.val1,
+        //     fw_build.val1,
+        //     opmode.val1
+        // );
 
         printf(
-            "ENS160: TVOC = %d.%06d ppb; eCO2 = %d.%06d ppm; AQI-UBA: %d\n",
+            "ENS160: status: %d, TVOC = %d.%06d ppb; eCO2 = %d.%06d ppm; AQI-UBA: %d\n",
+            status.val1,
             tvoc.val1,
             tvoc.val2,
             eco2.val1,
