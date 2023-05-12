@@ -202,7 +202,7 @@ struct ens160_data
     uint16_t eco2;
     enum sensor_value_ens160_stage stage;
     enum sensor_value_ens160_opmode opmode;
-    enum sensor_value_ens160_opmode measurement_opmode;
+    enum sensor_value_ens160_opmode desired_opmode;
     struct ens160_step_config step_config;
     struct sensor_value temp_in;
     struct sensor_value rh_in;

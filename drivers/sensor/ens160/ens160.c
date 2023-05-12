@@ -126,7 +126,7 @@ static int ens160_initialize_custom_opmode(const struct device* dev, uint8_t ste
 
         data->step_count = step_count;
         data->stage = SENSOR_ENS160_STAGE_RUNNING;
-        data->measurement_opmode = SENSOR_ENS160_OPMODE_STANDARD;
+        data->desired_opmode = SENSOR_ENS160_OPMODE_STANDARD;
         memset(&data->step_config, 0, sizeof(data->step_config));
 
         return 0;
@@ -139,7 +139,7 @@ static int ens160_initialize_custom_opmode(const struct device* dev, uint8_t ste
 
     data->step_count = step_count;
     data->stage = SENSOR_ENS160_STAGE_CUSTOM_CONFIGURING;
-    data->measurement_opmode = SENSOR_ENS160_OPMODE_CUSTOM;
+    data->desired_opmode = SENSOR_ENS160_OPMODE_CUSTOM;
     memset(&data->step_config, 0, sizeof(data->step_config));
 
     return 0;
@@ -259,7 +259,7 @@ static int ens160_reset(const struct device* dev)
 
     data->step_count = 0;
     data->stage = SENSOR_ENS160_STAGE_RUNNING;
-    data->measurement_opmode = SENSOR_ENS160_OPMODE_STANDARD;
+    data->desired_opmode = SENSOR_ENS160_OPMODE_STANDARD;
     memset(&data->step_config, 0, sizeof(data->step_config));
 
     return 0;
@@ -382,8 +382,15 @@ static int ens160_begin_measurement_cycle(const struct device* dev, uint8_t expe
 
     ens160_warn_incomplete_custom_configuration(dev, "ens160_begin_measurement_cycle");
 
-    err = ens160_set_opmode(dev, data->measurement_opmode);
+#ifdef ENS160_FORCE_OPMODE
+    err = ens160_set_opmode(dev, data->desired_opmode);
     if (err) { return err; }
+#else
+    if (data->opmode != data->desired_opmode) {
+        err = ens160_set_opmode(dev, data->desired_opmode);
+        if (err) { return err; }
+    }
+#endif
 
     err = ens160_wait_for_status(dev, expected_type);
     if (err) {
@@ -502,7 +509,7 @@ static int ens160_init(const struct device* dev)
     data->stage = SENSOR_ENS160_STAGE_UNKNOWN;
     data->sensor_status = 0;
     data->opmode = SENSOR_ENS160_OPMODE_UNKNOWN;
-    data->measurement_opmode = SENSOR_ENS160_OPMODE_STANDARD;
+    data->desired_opmode = SENSOR_ENS160_OPMODE_STANDARD;
     data->rev_ens16x = 0;
     data->fw_ver_build = 0;
     data->fw_ver_major = 0;

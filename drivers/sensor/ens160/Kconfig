@@ -13,3 +13,10 @@ menuconfig ENS160
 	select SPI if $(dt_compat_on_bus,$(DT_COMPAT_SCIOSENSE_ENS160),spi)
 	help
 	  Enable driver for ENS160 I2C- or SPI- based TVOC, eCO2 and AQI-UBA and gas sensor.
+
+if ENS160
+  config ENS160_FORCE_OPMODE
+    bool "Forces changing the device's OPMODE for each measurement cycle"
+    help
+      Forces the device to enter a specific OPMODE for each measurement cycle.
+endif
