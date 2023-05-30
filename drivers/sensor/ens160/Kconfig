@@ -9,6 +9,7 @@ menuconfig ENS160
 	bool "ENS160 Digital Metal-Oxide Multi-Gas Sensor"
 	default y
 	depends on DT_HAS_SCIOSENSE_ENS160_ENABLED
+  select SENSOR
 	select I2C if $(dt_compat_on_bus,$(DT_COMPAT_SCIOSENSE_ENS160),i2c)
 	select SPI if $(dt_compat_on_bus,$(DT_COMPAT_SCIOSENSE_ENS160),spi)
 	help
