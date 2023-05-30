@@ -1,8 +1,8 @@
-# list(APPEND BOARD_ROOT ${CMAKE_SOURCE_DIR})
-# list(APPEND DTS_ROOT ${CMAKE_SOURCE_DIR})
+# This is needed to make Zephyr/West/CMake generate system calls,
+# in `build/zephyr/include/generated/syscalls`
+list(APPEND SYSCALL_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/include")
+set(SYSCALL_INCLUDE_DIRS ${SYSCALL_INCLUDE_DIRS} PARENT_SCOPE)
 
 zephyr_include_directories(include)
 
 add_subdirectory(drivers)
-
-message("*************** TEST zephyr/module: ZEPHYR_SKIA_FIRMWARE_CMAKE_DIR = ${ZEPHYR_SKIA_FIRMWARE_CMAKE_DIR}")

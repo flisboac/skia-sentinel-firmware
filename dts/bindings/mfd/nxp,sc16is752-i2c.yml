@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: Apache-2.0
+
+include: ["nxp,sc16is7xx.yml", sensor-device.yaml, i2c-device.yaml]
+
+description: NXP SC16IS752 I2C to UART bridge (I2C tnterface).
+
+compatible: "nxp,sc16is752-i2c"
+bus: nxp,sc16is752
+on-bus: i2c
+
+properties:
+  part-number:
+    default: sc16is752
+    const: sc16is752
+
+  'total-uart-channels':
+    type: int
+    const: 2
+    default: 2
+
+  'total-gpio-channels':
+    type: int
+    const: 2
+    default: 2
+
+  supports-modem-flow-control:
+    type: int
+    const: 1
+    default: 1
+
+  shared-gpio-channels:
+    type: array
+    const:
+      - 0
+      - 1
+    default:
+      - 0
+      - 1
+

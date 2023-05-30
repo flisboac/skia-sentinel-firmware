@@ -1,0 +1,237 @@
+# SPDX-License-Identifier: Apache-2.0
+
+include: base.yaml
+
+properties:
+  uart-controller:
+    type: boolean
+    required: true
+
+  channel:
+    type: int
+    required: true
+    description: |
+      The UART's channel.
+
+      Channels are identified as an index, starting at 0 (zero).
+
+      The number of available UART channels changes according to the part number of
+      the IC, but in general, up to 2 UART channels are available.
+
+  xtal-prescaler:
+    type: int
+    default: 0
+    description: |
+      Sets a specific UART baud rate prescaler value.
+
+      This will prevent the driver from any attempts to optimizing the baud rate
+      calculation (ie. effective baud rate with the smallest possible error/deviation).
+    enum:
+      - 0
+      - 1
+      - 4
+
+  current-speed:
+    type: int
+    default: 9600
+    description: |
+      Initial baud rate setting for UART
+
+  operation-mode:
+    type: string
+    default: rs232
+    description: |
+      Enables 9-bit (Multidrop) mode (RS-485).
+    enum:
+      - rs485
+      - rs232
+
+  invert-rts-value:
+    type: boolean
+    description: |
+      Inverts the meaning of the RTS flag. Applicable only when `operation-mode = "rs485"`.
+
+  hw-flow-control:
+    type: boolean
+    description: |
+      Set to enable RTS/CTS flow control at boot time.
+
+  modem-flow-control:
+    type: boolean
+    description: |
+      Enables modem flow control flags for this UART channel.
+
+      This will bind 4 GPIO pins to the UART channel:
+
+      - DSR ("Data Set Ready," active LOW);
+      - DTR ("Data Terminal Ready," active LOW);
+      - CD ("Carrier Detect," active LOW);
+      - RI ("Ring Indicator," active LOW);
+
+      Beware that, depending on the device's part-number, modem-flow-control
+      may affect GPIO controller availability:
+
+      - For SC16IS750 and SC16IS760, GPIO0 is always available, but
+        GPIO1 will be unavailable when modem-flow-control is active for UART0.
+      - For SC16IS752 and SC16IS762, GPIO0 and GPIO1 are tied to UART0 and UART1,
+        respectively; activating modem-flow-control of an UART will make the
+        corresponding GPIO unavailable.
+      - SC16IS740 is unaffected, as it has neither GPIO nor Modem Flow support.
+
+  hw-flow-mode:
+    type: string
+    default: "device"
+    description: |
+      Indicates how to manage hardware flow control (CTS and RTS flags).
+
+      - "device": The device itself will control signaling;
+      - "driver": The device's driver will control signaling;
+      - "user": The user will control signaling (e.g. via custom device functions).
+    enum:
+      - device
+      - driver
+      - user
+
+  modem-flow-mode:
+    type: string
+    default: "device"
+    description: |
+      Indicates how to manage modem flow control (DSR, DTR, CD and RI flags).
+
+      - "device": The device itself will control signaling;
+      - "driver": The device's driver will control signaling;
+      - "user": The user will control signaling (e.g. via custom device functions).
+    enum:
+      - device
+      - driver
+      - user
+
+  enable-sleep-mode:
+    type: boolean
+    description: |
+      Enables sleep mode for this UART channel.
+
+      Sleep mode is activated when:
+
+      - There is no data in the RX FIFO (ie. received data was fully read);
+      - The serial input data line (RX) is idle (ie. not receiving data);
+      - The TX FIFO and TX shift register are empty (ie. transmission has
+        finished); AND
+      - There are no interrupts pending, except for THR.
+
+      The UART channel will get out of sleep mode automatically, when:
+
+      - Any change is detected on the RX line (ie. upstream UART device wants
+        to send data);
+      - When there's any change in the input pins (eg. HW or Modem flow control
+        indicates that new communication will start); OR
+      - Data is written to the TX FIFO (ie. host starts communication);
+
+      If enabled, sleep mode will greatly decrease power consumption.
+
+  disable-tx:
+    type: boolean
+    description: |
+      Disables transmission.
+
+      This flags allow the UART channel to start with data transmission entirely
+      disabled. The host can write to the UART, but no data will be sent
+      to the upstream UART-connected device.
+
+      See the Extra Features Control Register (EFCR), bit 2.
+
+  disable-rx:
+    type: boolean
+    description: |
+      Disables transmission.
+
+      This flags allow the UART channel to start with data reception entirely
+      disabled. Even if the upstream UART-connected device sends data, it will be
+      ignored. On the host side (ie. in Zephyr), reading from the UART is not advisable
+      when in this state.
+
+      See the Extra Features Control Register (EFCR), bit 1.
+
+  enable-fifo:
+    type: boolean
+    description: |
+      Enables FIFO on the device, for both TX and RX.
+
+      All reads and writes to/from the SC16IS7xx IC are actually performed byte-by-byte,
+      on a 64-byte FIFO queue in the device itself. If the FIFO fills up, the oldest data
+      is lost. When FIFO is disabled, the FIFO's capacity is set to be 1 byte instead,
+      therefore data is sent as it's written, and data must be read as soon as it arrives.
+
+      If `enable-fifo`, the user can set at which FIFO size an interrupt or trigger is
+      raised via `tx-fifo-trigger` and `rx-fifo-trigger`.
+
+  tx-fifo-trigger:
+    type: int
+    default: 16
+    description: |
+      Sets the trigger level for the TX FIFO.
+    enum:
+      - 8
+      - 16
+      - 32
+      - 56
+
+  rx-fifo-trigger:
+    type: int
+    default: 8
+    description: |
+      Sets the trigger level for the RX FIFO.
+    enum:
+      - 8
+      - 16
+      - 56
+      - 60
+
+  parity:
+    type: string
+    default: "none"
+    description: |
+      Configures the parity of the adapter.
+
+      "none" disables parity altogether.
+
+      "mark" forces the parity bit to be 1, while "space" forces it to be 0.
+    enum:
+      - "none"
+      - "odd"
+      - "even"
+      - "mark"
+      - "space"
+
+  stop-bits:
+    type: string
+    default: "1"
+    description: |
+      Sets the number of stop bits.
+
+      Please note that:
+
+      - `"1_5"` and `"2"` are the very same value, when setting up the UART channel's
+        configuration in the device.
+      - `stop-bits = "1_5"` is only valid when `data-bits = 5`. Setting `stop-bits = "1_5"`
+        for any other `data-bits` length will effectively yield `stop-bits = "2"` during
+        operation.
+      - `stop-bits = "2"` is only valid when `data-bits` is 6, 7 or 8.
+
+      These limitations are imposed by the device's capabilities. Please see the datasheet,
+      register LCR, bit 2 (LCR[2]), for more details.
+    enum:
+      - "1"
+      - "1_5"
+      - "2"
+
+  data-bits:
+    type: int
+    default: 8
+    description: |
+      Sets the number of data bits (word length).
+    enum:
+      - 5
+      - 6
+      - 7
+      - 8

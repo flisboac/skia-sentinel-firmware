@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+
+menuconfig GPIO_SC16IS7XX
+  bool "GPIO Bridge device for the SC16IS7XX Single/Dual UART bridge with I2C-bus/SPI interface"
+  default y
+  depends on MFD_SC16IS7XX && (\
+      DT_HAS_NXP_SC16IS750_GPIO_CONTROLLER_ENABLED \
+      || DT_HAS_NXP_SC16IS760_GPIO_CONTROLLER_ENABLED \
+      || DT_HAS_NXP_SC16IS752_GPIO_CONTROLLER_ENABLED \
+      || DT_HAS_NXP_SC16IS762_GPIO_CONTROLLER_ENABLED \
+    )
+  select GPIO
+  help
+    Enable driver for SC16IS7XX I2C- or SPI- based Single/Dual GPIO bridge with I2C-bus/SPI interface.
+
+if GPIO_SC16IS7XX
+
+config GPIO_SC16IS7XX_INIT_PRIORITY
+  int "SC16IS7XX GPIO controller initialization priority"
+  default 77
+  help
+    Sets the children GPIO controllers' initialization priorities.
+
+    The priority MUST be higher in value (ie. lower in priority) than
+    MFD_SC16IS7XX_DEVICE_INIT_PRIORITY.
+
+    If UART is also used, it's advised for GPIO's priority to be LOWER
+    (ie. higher in value) than UART_SC16IS7XX_INIT_PRIORITY, as the UART
+    is generally the main use case for this chip, and therefore, should
+    also be taken as a priority if GPIO ports collide with modem flow
+    control ports.
+
+endif

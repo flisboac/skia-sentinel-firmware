@@ -1,1 +1,4 @@
 add_subdirectory_ifdef(CONFIG_SENSOR sensor)
+add_subdirectory_ifdef(CONFIG_SERIAL serial)
+add_subdirectory_ifdef(CONFIG_GPIO gpio)
+add_subdirectory_ifdef(CONFIG_MFD mfd)

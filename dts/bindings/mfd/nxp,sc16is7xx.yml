@@ -1,0 +1,110 @@
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  NXP SC16IS7XX I2C/SPI to UART bridge.
+
+  The SC16IS7XX supports both an external UART and GPIO controller. These
+  controllers have to be added to the Device Tree as children of the device,
+  while the SC16IS7XX device itself must be added as a child of the device
+  from which it will be interfaced by (ie. either an I2C or SPI device).
+
+  Functionality depends on the device model:
+
+  - The SC16IS7X0 series is a single-UART bridge.
+  - The SC16IS7X2 series is a dual-UART bridge.
+
+  In both cases, depending on the device's configuration, up to two GPIO
+  controllers can be used, from which 4 GPIO pins can be accessed from each.
+  Those controllers may be associated with an UART channel, in which case the
+  user can either use the controller as GPIO or as Modem Flow Control pins.
+
+  An example I2C configuration:
+
+    #include <zephyr/dt-bindings/mfd/nxp-sc16is7xx.h>
+
+    &i2c0 {
+      sc16is7xx: sc16is752@90 {
+        compatible = "nxp,sc16is752-i2c";
+        reg = < 0x90 >;
+
+        sc16is7xx_uart0: sc16is7xx_uart_controller {
+          compatible = "nxp,sc16is7xx-uart-controller";
+          status = "okay";
+          hw-flow-control;
+          modem-flow-control;
+          channel = < 0 >;
+          current-speed = < 9600 >;
+        };
+
+        sc16is7xx_gpio1: sc16is7xx_gpio_controller {
+          compatible = "nxp,sc16is7xx-gpio-controller";
+          status = "okay";
+          gpio-controller;
+          channel = <1>;
+          #gpio-cells = <2>;
+          ngpios = <4>;
+        };
+      };
+    };
+
+properties:
+  part-number:
+    type: string
+    description: |
+      Indicates the part number of the device.
+    enum:
+      - sc16is740
+      - sc16is750
+      - sc16is760
+      - sc16is752
+      - sc16is762
+
+  xtal-freq:
+    type: int
+    default: 1843200
+    description:
+      Frequency of the crystal associated with the device.
+
+      Each UART channel has an individual prescaler and divider configurations
+      that allow the device to generate a baud rate frequency based on the
+      frequency of the crystal. Internally, the driver will try to adjust the
+      prescaler to achieve the lowest possible error difference between the
+      desired and actual baud rate.
+
+      The default value is from a reference design, taken from the device's
+      datasheet; but be sure to double-check if it's correct with regards to your
+      hardware, otherwise UART communication may fail in unpredictable ways.
+
+  reset-gpios:
+    type: phandle-array
+    description:
+      Indicates from which host's GPIO pin the device's hardware reset pin
+      will be accessed through. If this pin is LOW, the device will be
+      hardware-reset.
+
+  interrupt-gpios:
+    type: phandle-array
+    description: |
+      Interrupt GPIO pin (active-low open-drain).
+
+  'total-uart-channels':
+    type: int
+    description: |
+      Indicates the total number of UART channels available.
+
+  'total-gpio-channels':
+    type: int
+    description: |
+      Indicates the total number of UART channels available.
+
+  supports-modem-flow-control:
+    type: int
+    description: |
+      Indicates whether this IC supports the modem control flow flags.
+
+  shared-gpio-channels:
+    type: array
+    description: |
+      Indicates which GPIO channels are shared with UART Modem Flow GPIOs.
+      GPIO channels with the listed IDs must be configured to be either GPIO
+      or Modem Flow.

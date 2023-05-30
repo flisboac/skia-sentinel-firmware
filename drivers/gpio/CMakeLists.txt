@@ -1,0 +1,1 @@
+add_subdirectory_ifdef(CONFIG_GPIO_SC16IS7XX sc16is7xx)

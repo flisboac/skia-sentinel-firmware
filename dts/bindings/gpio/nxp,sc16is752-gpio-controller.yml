@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+
+include: ["nxp,sc16is7xx-gpio-controller.yml"]
+
+compatible: "nxp,sc16is752-gpio-controller"
+on-bus: nxp,sc16is752
+
+description: GPIO controller part for the SC16IS752 UART bridge
+
+properties:
+  channel:
+    enum:
+      - 0
+      - 1

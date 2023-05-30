@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+
+include: ["nxp,sc16is7xx-uart-controller.yml"]
+
+description: UART controller part for the SC16IS750 UART bridge
+
+compatible: "nxp,sc16is750-uart-controller"
+on-bus: nxp,sc16is750
+
+properties:
+  channel:
+    enum:
+      - 0

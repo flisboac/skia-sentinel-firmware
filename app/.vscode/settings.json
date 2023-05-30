@@ -1,0 +1,16 @@
+{
+  "C_Cpp.default.configurationProvider": "nordic-semiconductor.nrf-connect",
+  "files.associations": {
+    "*.h": "c",
+    "*.c": "c"
+  },
+  "nrf-connect.west.env": {
+    "$base": "terminal"
+  },
+  "kconfig.zephyr.base": "${workspaceRoot}/../ext/zephyr",
+  "cmake.sourceDirectory": "${workspaceFolder}/app",
+  "cmake.buildDirectory": "${workspaceFolder}/app/build",
+  "makefile.compileCommandsPath": "${workspaceFolder}/app/build/compile_commands.json",
+  "devicetree.defaultBoard": "wemos_c3_mini",
+  "devicetree.zephyr": "${workspaceFolder}/../ext/zephyr"
+}

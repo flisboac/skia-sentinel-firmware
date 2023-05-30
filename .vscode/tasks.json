@@ -10,6 +10,11 @@
       "group": {
         "kind": "build",
         "isDefault": true
+      },
+      "options": {
+        "env": {
+          "BOARD": "wemos_c3_mini"
+        }
       }
     },
     {

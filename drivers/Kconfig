@@ -1,1 +1,19 @@
+config MFD
+  bool
+
+config GPIO
+  bool
+
+config SENSOR
+  bool
+
+config SERIAL
+  bool
+
+config UART
+  bool
+
+rsource "mfd/Kconfig"
+rsource "serial/Kconfig"
+rsource "gpio/Kconfig"
 rsource "sensor/Kconfig"

@@ -3,6 +3,7 @@
     sensor-th = &sht30;
     sensor-thp = &bme680;
     sensor-tvoc = &ens160;
+    uart-bridge = &sc16is762;
   };
 };
 
@@ -26,4 +27,49 @@
     status = "okay";
 		reg = <0x53>;
 	};
+
+  sc16is762: sc16is762@90 {
+    compatible = "nxp,sc16is762-i2c";
+    reg = < 0x90 >;
+    // xtal-freq = < 1843200 >;
+
+    sc16is762_uart0: sc16is762-uart {
+      compatible = "nxp,sc16is762-uart-controller";
+      uart-controller;
+      channel = < 0 >;
+    };
+
+    sc16is762_gpio1: sc16is762-gpio {
+      compatible = "nxp,sc16is762-gpio-controller";
+      gpio-controller;
+      channel = < 1 >;
+      #gpio-cells = < 2 >;
+      ngpios = < 4 >;
+    };
+  };
 };
+
+
+// For I2C
+// &i2c0 {
+//   sc16is7xx: sc16is7xx@90 {
+//     compatible = "nxp,sc16is7xx-i2c";
+//     reg = < 0x90 >;
+
+//     sc16is7xx_gpio {
+//       compatible = "nxp,sc16is7xx-gpio-controller";
+//       status = "okay";
+//       gpio-controller;
+//       #gpio-cells = <1>;
+//       ngpios = <8>;
+//     };
+
+//     sc16is7xx_uart {
+//       compatible = "nxp,sc16is7xx-uart-controller";
+//       status = "okay";
+//       uart-controller;
+//       #gpio-cells = <1>;
+//       ngpios = <8>;
+//     };
+//   };
+// };

@@ -12,11 +12,8 @@ get_filename_component(
   ABSOLUTE
 )
 
-# list(APPEND BOARD_ROOT ${PROJECT_ROOT})
-# list(APPEND BOARD_ROOT ${APPLICATION_PROJECT_DIR})
-# list(APPEND DTS_ROOT ${PROJECT_ROOT})
-include_directories(${APPLICATION_PROJECT_DIR}/include)
-include_directories(${PROJECT_ROOT}/include)
+# Here is where the (West) magic happens!
+list(APPEND ZEPHYR_EXTRA_MODULES ${PROJECT_ROOT})
 
 message("ZephyrBuildConfig: ZEPHYR_BASE = ${ZEPHYR_BASE}")
 message("ZephyrBuildConfig: PROJECT_ROOT = ${PROJECT_ROOT}")
