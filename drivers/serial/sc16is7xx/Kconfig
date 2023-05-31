@@ -11,6 +11,7 @@ menuconfig UART_SC16IS7XX
       || DT_HAS_NXP_SC16IS762_UART_CONTROLLER_ENABLED \
     )
   select UART
+  select SERIAL
   select SERIAL_HAS_DRIVER
   help
     Enable driver for SC16IS7XX I2C- or SPI- based Single/Dual UART bridge with I2C-bus/SPI interface.

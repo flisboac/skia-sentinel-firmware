@@ -30,7 +30,7 @@ if MFD_SC16IS7XX
 
 config MFD_SC16IS7XX_DEVICE_INIT_PRIORITY
   int "SC16IS7XX GPIO controller initialization priority"
-  default 77
+  default 75
   help
     Sets the MFD driver's initialization priority.
 

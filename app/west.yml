@@ -6,7 +6,7 @@ manifest:
     - name: zephyr
       remote: zephyrproject-rtos
       #revision: main
-      revision: 7a946450e51e9b92c99c4326eb2f092e420ba64f
+      revision: 9515a5228beb8dd6c77bc3c9b16e97422bd08cd3
       import: true
       west-commands: scripts/west-commands.yml
       path: ext/zephyr
