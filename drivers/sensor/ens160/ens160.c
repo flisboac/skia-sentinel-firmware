@@ -354,16 +354,23 @@ static int ens160_wait_for_status(const struct device* dev, uint8_t expected_typ
 #undef IS_NEW
 }
 
-static void ens160_warn_incomplete_custom_configuration(const struct device* dev, const char* function_name) {
+static void ens160_warn_incomplete_custom_configuration( //
+    const struct device* dev,
+    const char* function_name,
+    bool measuring
+)
+{
     struct ens160_data* data = dev->data;
 
     if ((int) data->stage != (int) SENSOR_ENS160_STAGE_CUSTOM_CONFIGURING) {
-        LOG_DBG(
-            "%s: sensor '%s': custom mode was not configured; changing the sensor's operation "
-            "mode to CUSTOM at this moment is most likely an user error",
-            function_name,
-            dev->name
-        );
+        if (!measuring) {
+            LOG_DBG(
+                "%s: sensor '%s': custom mode was not configured; changing the sensor's operation "
+                "mode to CUSTOM at this moment is most likely an user error",
+                function_name,
+                dev->name
+            );
+        }
     } else if (data->step_count > 0) {
         LOG_DBG(
             "%s: sensor '%s': custom mode is missing %d step(s); changing the sensor's "
@@ -380,7 +387,7 @@ static int ens160_begin_measurement_cycle(const struct device* dev, uint8_t expe
     struct ens160_data* data = dev->data;
     int err;
 
-    ens160_warn_incomplete_custom_configuration(dev, "ens160_begin_measurement_cycle");
+    ens160_warn_incomplete_custom_configuration(dev, "ens160_begin_measurement_cycle", true);
 
 #ifdef ENS160_FORCE_OPMODE
     err = ens160_set_opmode(dev, data->desired_opmode);
@@ -801,7 +808,7 @@ static int ens160_attr_set_opmode(const struct device* dev, enum sensor_value_en
     case SENSOR_ENS160_OPMODE_STANDARD: break;
     case SENSOR_ENS160_OPMODE_RESET: return ens160_reset(dev);
     case SENSOR_ENS160_OPMODE_CUSTOM:
-        ens160_warn_incomplete_custom_configuration(dev, "ens160_attr_set_opmode");
+        ens160_warn_incomplete_custom_configuration(dev, "ens160_attr_set_opmode", false);
         break;
     default: return -EINVAL;
     }
