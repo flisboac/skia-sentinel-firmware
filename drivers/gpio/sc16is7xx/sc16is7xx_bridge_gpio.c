@@ -4,7 +4,7 @@
 #include <zephyr/drivers/gpio/gpio_utils.h>
 #include <zephyr/logging/log.h>
 
-LOG_MODULE_REGISTER(nxp_sc16is7xx_gpio_controller, CONFIG_UART_LOG_LEVEL);
+LOG_MODULE_REGISTER(nxp_sc16is7xx_gpio_controller, CONFIG_GPIO_LOG_LEVEL);
 
 struct sc16is7xx_gpio_pins_config
 {
@@ -91,7 +91,7 @@ static void sc16is7xx_gpio_handle_interrupt(  //
     int err = 0;
 
     err = k_sem_take(&data->lock, K_FOREVER);
-    if (!err) {
+    if (err) {
         LOG_ERR("Device '%s': Could not lock data access!", dev->name);
         return;
     }
@@ -101,19 +101,19 @@ static void sc16is7xx_gpio_handle_interrupt(  //
     uint8_t prev_input_port_last = data->input_port_last;
 
     err = sc16is7xx_lock_bus(config->parent_dev, &bus_lock, K_FOREVER);
-    if (!err) {
+    if (err) {
         LOG_ERR("Device '%s': Could not lock device bus access!", dev->name);
         goto end;
     }
 
     err = sc16is7xx_gpio_process_input_UNSAFE_(dev, NULL, bus_lock.bus);
-    if (!err) {
+    if (err) {
         LOG_ERR("Device '%s': Could not process input at interrupt time!", dev->name);
         goto end;
     }
 
     err = sc16is7xx_unlock_bus(config->parent_dev, &bus_lock);
-    if (!err) { LOG_ERR("Device '%s': Could not unlock device bus access!", dev->name); }
+    if (err) { LOG_ERR("Device '%s': Could not unlock device bus access!", dev->name); }
 
     curr_input_port_last = data->input_port_last & config->common.port_pin_mask;
     prev_input_port_last = prev_input_port_last & config->common.port_pin_mask;
@@ -158,7 +158,7 @@ static int sc16is7xx_gpio_port_set_raw(  //
     tx_buf ^= toggle;
 
     err = sc16is7xx_lock_bus(config->parent_dev, &bus_lock, K_FOREVER);
-    if (!err) {
+    if (err) {
         LOG_ERR("Device '%s': Could not lock device bus access! Error code = %d", dev->name, err);
         return -EIO;
     }
@@ -172,7 +172,7 @@ static int sc16is7xx_gpio_port_set_raw(  //
         err = -EIO;
     }
 
-    if (!err) {
+    if (err) {
         if (!sc16is7xx_unlock_bus(config->parent_dev, &bus_lock)) {
             LOG_ERR("Device '%s': Could not unlock device bus access!", dev->name);
         }
@@ -203,10 +203,10 @@ static int sc16is7xx_gpio_port_get_raw(const struct device* dev, gpio_port_value
     }
 
     err = k_sem_take(&data->lock, K_FOREVER);
-    if (!err) { return err; }
+    if (err) { return err; }
 
     err = sc16is7xx_lock_bus(config->parent_dev, &bus_lock, K_FOREVER);
-    if (!err) {
+    if (err) {
         LOG_ERR("Device '%s': Could not lock device bus access! Error code = %d", dev->name, err);
         k_sem_give(&data->lock);
         return -EIO;
@@ -275,14 +275,14 @@ static int sc16is7xx_gpio_pin_interrupt_configure(  //
     if (trig != GPIO_INT_TRIG_BOTH) { return -ENOTSUP; }
 
     err = sc16is7xx_lock_bus(config->parent_dev, &bus_lock, K_FOREVER);
-    if (!err) {
+    if (err) {
         LOG_ERR("Device '%s': Could not lock device bus access! Error code = %d", dev->name, err);
         return -EIO;
     }
 
     reg_addr = SC16IS7XX_REG_IOINTENA(0, SC16IS7XX_REGRW_READ);
     err = sc16is7xx_bus_read_byte(bus, reg_addr, &reg_value);
-    if (!err) {
+    if (err) {
         err = -EIO;
         goto end;
     }
@@ -295,7 +295,7 @@ static int sc16is7xx_gpio_pin_interrupt_configure(  //
 
     reg_addr = SC16IS7XX_REG_IOINTENA(0, SC16IS7XX_REGRW_WRITE);
     err = sc16is7xx_bus_write_byte(bus, reg_addr, reg_value);
-    if (!err) { err = -EIO; }
+    if (err) { err = -EIO; }
 
 end:
     if (!sc16is7xx_unlock_bus(config->parent_dev, &bus_lock)) {
@@ -319,7 +319,7 @@ static int sc16is7xx_gpio_manage_callback(  //
     // there was no lock in place.
 
     err = k_sem_take(&data->lock, K_FOREVER);
-    if (!err) { return err; }
+    if (err) { return err; }
 
     err = gpio_manage_callback(&data->callbacks, callback, set);
 
@@ -345,7 +345,7 @@ static int sc16is7xx_gpio_pin_configure(const struct device* dev, gpio_pin_t pin
     if (flags & (GPIO_PULL_UP | GPIO_PULL_DOWN | GPIO_DISCONNECTED | GPIO_SINGLE_ENDED)) { return -ENOTSUP; }
 
     err = sc16is7xx_lock_bus(config->parent_dev, &bus_lock, K_FOREVER);
-    if (!err) {
+    if (err) {
         LOG_ERR("Device '%s': Could not lock device bus access! Error code = %d", dev->name, err);
         return -EIO;
     }
@@ -353,14 +353,14 @@ static int sc16is7xx_gpio_pin_configure(const struct device* dev, gpio_pin_t pin
 
     reg_addr = SC16IS7XX_REG_IOSTATE(0, SC16IS7XX_REGRW_READ);
     err = sc16is7xx_bus_read_byte(bus_lock.bus, reg_addr, &temp_pins);
-    if (!err) {
+    if (err) {
         err = -EIO;
         goto end;
     }
 
     reg_addr = SC16IS7XX_REG_IODIR(0, SC16IS7XX_REGRW_READ);
     err = sc16is7xx_bus_read_byte(bus_lock.bus, reg_addr, &temp_outputs);
-    if (!err) {
+    if (err) {
         err = -EIO;
         goto end;
     }
@@ -378,14 +378,14 @@ static int sc16is7xx_gpio_pin_configure(const struct device* dev, gpio_pin_t pin
 
     reg_addr = SC16IS7XX_REG_IODIR(0, SC16IS7XX_REGRW_WRITE);
     err = sc16is7xx_bus_write_byte(bus_lock.bus, reg_addr, temp_outputs);
-    if (!err) {
+    if (err) {
         err = -EIO;
         goto end;
     }
 
     reg_addr = SC16IS7XX_REG_IOSTATE(0, SC16IS7XX_REGRW_WRITE);
     err = sc16is7xx_bus_write_byte(bus_lock.bus, reg_addr, temp_pins);
-    if (!err) {
+    if (err) {
         err = -EIO;
         goto end;
     }
@@ -415,27 +415,43 @@ static int sc16is7xx_gpio_init(const struct device* dev)
     uint8_t reg_value;
     int err;
 
-    if (!parent_dev || !device_is_ready(parent_dev)) { return -ENODEV; }
+    if (!parent_dev) {
+        err = -ENODEV;
+        LOG_ERR("Device '%s': Could not get/find parent MFD instance! Error code = %d", dev->name, err);
+        return err;
+    }
+
+    if (!device_is_ready(parent_dev)) {
+        err = -ENODEV;
+        LOG_ERR("Device '%s': Parent MFD instance was not initialized yet! Error code = %d", dev->name, err);
+    }
 
     sys_slist_init(&data->callbacks);
 
     data->own_instance = dev;
 
     data->device_info = sc16is7xx_get_device_info(parent_dev);
-    if (!data->device_info) { return -EINVAL; }
+    if (!data->device_info) {
+        err = -EINVAL;
+        LOG_ERR("Device '%s': Could not get device info from parent MFD! Error code = %d", dev->name, err);
+        return err;
+    }
 
     err = sc16is7xx_register_bridge(parent_dev, &data->bridge_info);
-    if (!err) { return err; }
+    if (err) {
+        LOG_ERR("Device '%s': Could not register bridge in parent MFD! Error code = %d", dev->name, err);
+        return err;
+    }
 
     err = sc16is7xx_lock_bus(config->parent_dev, &bus_lock, K_FOREVER);
-    if (!err) {
+    if (err) {
         LOG_ERR("Device '%s': Could not lock device bus access! Error code = %d", dev->name, err);
         return -EIO;
     }
 
     reg_addr = SC16IS7XX_REG_IOCONTROL(0, SC16IS7XX_REGRW_READ);
     err = sc16is7xx_bus_read_byte(bus_lock.bus, reg_addr, &reg_value);
-    if (!err) {
+    if (err) {
         LOG_ERR("Device '%s': Could not read device's IOCONTROL register!", dev->name);
         err = -EIO;
         goto end;
@@ -448,7 +464,7 @@ static int sc16is7xx_gpio_init(const struct device* dev)
     );
     reg_addr = SC16IS7XX_REG_IOCONTROL(0, SC16IS7XX_REGRW_WRITE);
     err = sc16is7xx_bus_write_byte(bus_lock.bus, reg_addr, reg_value);
-    if (!err) {
+    if (err) {
         LOG_ERR("Device '%s': Could not write device's IOCONTROL register!", dev->name);
         err = -EIO;
         goto end;
@@ -460,6 +476,7 @@ end:
     }
 
     return err;
+    return 0;
 }
 
 static const struct gpio_driver_api sc16is7xx_gpio_driver_api = {

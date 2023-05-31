@@ -27,7 +27,7 @@
     #define MFD_SC16IS7XX_INTERRUPT_OWN_THREAD_ENABLED 0
 #endif
 
-LOG_MODULE_REGISTER(nxp_sc16is7xx, CONFIG_UART_LOG_LEVEL);
+LOG_MODULE_REGISTER(nxp_sc16is7xx_mfd, CONFIG_MFD_LOG_LEVEL);
 
 /**
  * @brief Has information on all registered bridges, for the strict
@@ -194,7 +194,7 @@ int sc16is7xx_lock_bus( //
     struct sc16is7xx_device_data* data = mfd_dev->data;
 
     err = k_mutex_lock(&data->bus_lock, timeout);
-    if (!err) { return err; }
+    if (err) { return err; }
 
     lock->bus = &config->bus;
     return 0;
@@ -405,11 +405,11 @@ static int sc16is7xx_device_softreset_UNSAFE_(const struct device* dev)
 
     reg_addr = SC16IS7XX_REG_IOCONTROL(0, SC16IS7XX_REGRW_WRITE);
     err = sc16is7xx_bus_read_byte(bus, reg_addr, &reg_data);
-    if (!err) { return err; }
+    if (err) { return err; }
 
     reg_data = SC16IS7XX_BITSET(reg_data, SC16IS7XX_REGFLD_IOCONTROL_SOFTRESET);
     err = sc16is7xx_bus_write_byte(bus, reg_addr, reg_data);
-    if (!err) { return err; }
+    if (err) { return err; }
 
     return err;
 }
@@ -431,10 +431,10 @@ static int sc16is7xx_device_init(const struct device* dev)
     data->own_instance = dev;
 
     err = k_mutex_init(&data->bus_lock);
-    if (!err) { return err; }
+    if (err) { return err; }
 
     err = sc16is7xx_device_validate_dt_info(dev);
-    if (!err) { return err; }
+    if (err) { return err; }
 
 #ifdef MFD_SC16IS7XX_INTERRUPT
 #ifdef MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
@@ -455,11 +455,12 @@ static int sc16is7xx_device_init(const struct device* dev)
 #endif
 
     err = sc16is7xx_device_softreset_UNSAFE_(dev);
-    if (!err) { return err; }
+    if (err) { return err; }
 
     data->ready = false;
 
     return err;
+    return 0;
 }
 
 #define DT_INST_SC16IS7XX_CHILDREN_LEN_1_(inst) (1)
