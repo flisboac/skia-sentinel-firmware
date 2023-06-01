@@ -42,6 +42,13 @@ static inline uint8_t sc16is7xx_gpio_current_public_output_mask(const struct dev
 {
     const struct sc16is7xx_gpio_config* config = dev->config;
     const struct sc16is7xx_gpio_data* data = dev->data;
+    return config->common.port_pin_mask << (config->ngpios * data->bridge_info.channel_id);
+}
+
+static inline uint8_t sc16is7xx_gpio_raw_ngpios_mask(const struct device* dev)
+{
+    const struct sc16is7xx_gpio_config* config = dev->config;
+    const struct sc16is7xx_gpio_data* data = dev->data;
     return data->pins_cfg.configured_as_outputs >> (config->ngpios * data->bridge_info.channel_id);
 }
 
@@ -96,6 +103,7 @@ static void sc16is7xx_gpio_handle_interrupt(  //
         return;
     }
 
+    uint8_t raw_port_mask = sc16is7xx_gpio_current_public_output_mask(dev);
     uint32_t changed_pins;
     uint8_t curr_input_port_last;
     uint8_t prev_input_port_last = data->input_port_last;
@@ -115,8 +123,8 @@ static void sc16is7xx_gpio_handle_interrupt(  //
     err = sc16is7xx_unlock_bus(config->parent_dev, &bus_lock);
     if (err) { LOG_ERR("Device '%s': Could not unlock device bus access!", dev->name); }
 
-    curr_input_port_last = data->input_port_last & config->common.port_pin_mask;
-    prev_input_port_last = prev_input_port_last & config->common.port_pin_mask;
+    curr_input_port_last = data->input_port_last & raw_port_mask;
+    prev_input_port_last = prev_input_port_last & raw_port_mask;
 
     if (curr_input_port_last != prev_input_port_last && !err) {
         changed_pins = curr_input_port_last;
@@ -173,7 +181,7 @@ static int sc16is7xx_gpio_port_set_raw(  //
     }
 
     if (err) {
-        if (!sc16is7xx_unlock_bus(config->parent_dev, &bus_lock)) {
+        if (sc16is7xx_unlock_bus(config->parent_dev, &bus_lock)) {
             LOG_ERR("Device '%s': Could not unlock device bus access!", dev->name);
         }
         return err;
@@ -218,7 +226,7 @@ static int sc16is7xx_gpio_port_get_raw(const struct device* dev, gpio_port_value
      */
     err = sc16is7xx_gpio_process_input_UNSAFE_(dev, value, bus_lock.bus);
 
-    if (!sc16is7xx_unlock_bus(config->parent_dev, &bus_lock)) {
+    if (sc16is7xx_unlock_bus(config->parent_dev, &bus_lock)) {
         LOG_ERR("Device '%s': Could not unlock device bus access!", dev->name);
     }
 
@@ -298,7 +306,7 @@ static int sc16is7xx_gpio_pin_interrupt_configure(  //
     if (err) { err = -EIO; }
 
 end:
-    if (!sc16is7xx_unlock_bus(config->parent_dev, &bus_lock)) {
+    if (sc16is7xx_unlock_bus(config->parent_dev, &bus_lock)) {
         LOG_ERR("Device '%s': Could not unlock device bus access!", dev->name);
     }
 
@@ -397,7 +405,7 @@ static int sc16is7xx_gpio_pin_configure(const struct device* dev, gpio_pin_t pin
 
 end:
     if (bus_locked) {
-        if (!sc16is7xx_unlock_bus(config->parent_dev, &bus_lock)) {
+        if (sc16is7xx_unlock_bus(config->parent_dev, &bus_lock)) {
             LOG_ERR("Device '%s': Could not unlock device bus access!", dev->name);
         }
     }
@@ -471,7 +479,7 @@ static int sc16is7xx_gpio_init(const struct device* dev)
     }
 
 end:
-    if (!sc16is7xx_unlock_bus(config->parent_dev, &bus_lock)) {
+    if (sc16is7xx_unlock_bus(config->parent_dev, &bus_lock)) {
         LOG_ERR("Device '%s': Could not unlock device bus access!", dev->name);
     }
 
@@ -492,7 +500,7 @@ static const struct gpio_driver_api sc16is7xx_gpio_driver_api = {
 
 #define SC16IS7XX_CONFIG_COMMON_PROPS(inst, pn_suffix) \
     .common = { .port_pin_mask = \
-                    (GPIO_PORT_PIN_MASK_FROM_NGPIOS(DT_INST_PROP(inst, ngpios)) << DT_INST_PROP(inst, channel)) }, \
+                    (GPIO_PORT_PIN_MASK_FROM_NGPIOS(DT_INST_PROP(inst, ngpios))) }, \
     .parent_dev = DEVICE_DT_GET(DT_INST_PARENT(inst)), .ngpios = DT_INST_PROP(inst, ngpios)
 
 #define SC16IS7XX_DEFINE(inst, pn_suffix) \

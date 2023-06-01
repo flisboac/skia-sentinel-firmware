@@ -9,6 +9,7 @@ menuconfig GPIO_SC16IS7XX
       || DT_HAS_NXP_SC16IS752_GPIO_CONTROLLER_ENABLED \
       || DT_HAS_NXP_SC16IS762_GPIO_CONTROLLER_ENABLED \
     )
+	select MFD
   select GPIO
   help
     Enable driver for SC16IS7XX I2C- or SPI- based Single/Dual GPIO bridge with I2C-bus/SPI interface.

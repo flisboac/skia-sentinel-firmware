@@ -198,26 +198,6 @@
 
 
 //
-// [[ DEVICETREE HELPER MACROS ]]
-//
-
-#define SC16IS7XX_INST_SHARED_GPIO_CHANNELS_NAME(inst, pn_suffix) sc16is##pn_suffix##_device_shared_gpio_channels_##inst
-
-#define SC16IS7XX_INST_INIT_SHARED_GPIO_CHANNELS(inst, pn_suffix) \
-    static const uint8_t SC16IS7XX_INST_SHARED_GPIO_CHANNELS_NAME( \
-        inst, pn_suffix \
-    )[DT_PROP_LEN(DT_DRV_INST(inst), shared_gpio_channels)] = SC16IS7XX_EXPLODE__(shared_gpio_channels);
-
-#define SC16IS7XX_INIT_DEVICE_INFO(node, shared_gpio_channels_ptr) \
-    { \
-        .total_uart_channels = DT_PROP(node, total_uart_channels), \
-        .total_gpio_channels = DT_PROP(node, total_gpio_channels), \
-        .shared_gpio_channels_len = DT_PROP_LEN(node, shared_gpio_channels), \
-        .supports_modem_flow_control = supports_modem_flow_control, .device_info.part_id = part_id, \
-        .xtal_freq = DT_INST_PROP(inst, xtal_freq), .shared_gpio_channels = shared_gpio_channels_ptr, \
-    }
-
-//
 // [[ STRUCTS/DEFINES ]]
 //
 

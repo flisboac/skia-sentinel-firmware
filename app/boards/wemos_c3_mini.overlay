@@ -4,6 +4,15 @@
     sensor-thp = &bme680;
     sensor-tvoc = &ens160;
     uart-bridge = &sc16is762;
+    uart-bridge-led0 = &uart_bridge_led0;
+  };
+
+  leds {
+    compatible = "gpio-leds";
+    uart_bridge_led0: uart_bridge_led0 {
+      gpios = <&sc16is762_gpio1 0 GPIO_ACTIVE_HIGH>;
+      label = "uart-bridge-led0";
+    };
   };
 };
 
@@ -47,6 +56,11 @@
       ngpios = < 4 >;
     };
   };
+
+  // nordic_npm6001: nordic_npm6001@1 {
+  //   compatible = "nordic,npm6001";
+  //   reg = < 0x01 >;
+  // };
 };
 
 
