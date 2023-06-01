@@ -16,10 +16,14 @@
     "ESPTOOL_PORT": "/dev/ttyACM0",
     "ESPTOOL_BAUD": "460800",
     "ESPTOOL_FF": "80m",
-    "ZEPHYR_EXTRA_MODULES": "${workspaceFolder}"
+    "ZEPHYR_EXTRA_MODULES": "${workspaceFolder}",
+    "OPENOCD": "/usr/bin/openocd-esp32openocd",
+    "OPENOCD_DEFAULT_PATH": "/usr/share/openocd-esp32/scripts"
   },
   "cmake.configureArgs": [
-    "-DZEPHYR_EXTRA_MODULES=${workspaceFolder}"
+    "-DZEPHYR_EXTRA_MODULES=${workspaceFolder}",
+    "-DOPENOCD=/usr/bin/openocd-esp32openocd",
+    "-DOPENOCD_DEFAULT_PATH=/usr/share/openocd-esp32/scripts"
   ],
   "cmake.configureEnvironment": {
     "BOARD": "wemos_c3_mini"

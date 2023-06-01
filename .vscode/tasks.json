@@ -24,9 +24,9 @@
       "group": "test"
     },
     {
-      "label": "Debug",
+      "label": "Debug Server",
       "type": "shell",
-      "command": "cd app && west debug",
+      "command": "cd app && west debugserver",
       "group": "test"
     },
     {

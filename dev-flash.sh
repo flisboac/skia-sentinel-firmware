@@ -1,5 +1,6 @@
 #!/bin/sh
 set -e
+export DEBUG
 PROJECT_ROOT="$(cd "$(dirname "$0")"; pwd)"
 source "${PROJECT_ROOT}/.env.sh"
 if [ ! -e "${PROJECT_ROOT}/app/build" ]; then
