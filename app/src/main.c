@@ -13,9 +13,8 @@
 #include <zephyr/drivers/sensor/ens160.h>
 
 /* 1000 msec = 1 sec */
-#define SLEEP_TIME_MS 2000
-
-/* The devicetree node identifier for the "led0" alias. */
+#define SLEEP_TIME_MS 5000
+#define LED0_NODE DT_ALIAS(uart_bridge_led0)
 // #define LED0_NODE DT_ALIAS(led0)
 
 /*
@@ -38,6 +37,7 @@ int main(void)
 
     printk("initializing...\n");
 
+    const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
     const struct device* const dev_voc_eco2 = DEVICE_DT_GET_ONE(sciosense_ens160);
     const struct device* const dev_th = DEVICE_DT_GET_ONE(sensirion_sht3xd);
     const struct device* const dev_thp = DEVICE_DT_GET_ONE(bosch_bme680);
@@ -57,17 +57,39 @@ int main(void)
         return 0;
     }
 
-    printf("Is device %s ready?\n", dev_voc_eco2->name);
+    printk("Is device %s ready?\n", dev_voc_eco2->name);
     if (!device_is_ready(dev_voc_eco2)) {
         printf("Device %s is not ready\n", dev_voc_eco2->name);
         return 0;
     }
+
+    printk("Is GPIO device <%s %d> ready?\n", led.port->name, led.pin);
+	if (!gpio_is_ready_dt(&led)) {
+        printk("failed to initialize led device!\n");
+		return 0;
+	}
+
+    printk("Configuring GPIO device <%s %d>...\n", led.port->name, led.pin);
+	ret = gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
+	if (ret < 0) {
+        printk("failed to configure led pin!\n");
+		return 0;
+	}
+
+    k_msleep(SLEEP_TIME_MS);
 
     while (true) {
         th_ready = false;
         measure_th_(dev_th);
         measure_thp_(dev_thp);
         measure_voc_eco2_(dev_voc_eco2);
+
+		ret = gpio_pin_toggle_dt(&led);
+		if (ret < 0) {
+            printk("failed to toggle led!\n");
+			return 0;
+		}
+
         k_msleep(SLEEP_TIME_MS);
         printk("sleeping...\n");
     }
