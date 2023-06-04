@@ -53,7 +53,7 @@
 #define SC16IS7XX_REGRW(val) ((val) ? SC16IS7XX_REGRW_READ : SC16IS7XX_REGRW_WRITE)
 
 #define SC16IS7XX_REG(reg_id, channel_idx, rw_flag) \
-    (0x00 & (SC16IS7XX_REGRW(rw_flag) << 7) & (((reg_id) & (0x0f)) << 3) & (((channel_idx) & (0x03)) << 1))
+    ((SC16IS7XX_REGRW(rw_flag) << 7) | (((reg_id) & (0x0f)) << 3) | (((channel_idx) & (0x03)) << 1))
 
 //
 // [[ GENERAL REGISTER IDS ]]
@@ -224,7 +224,7 @@ struct sc16is7xx_interrupt_info
 
 struct sc16is7xx_bus_lock
 {
-    const struct sc16is7xx_bus* bus;
+    struct sc16is7xx_bus* bus;
     bool locked;
 };
 
@@ -237,6 +237,9 @@ struct sc16is7xx_device_info
     bool supports_hw_interrupts;
     enum sc16is7xx_part_id part_id;
     uint32_t xtal_freq;
+    k_timeout_t xtal_period;
+    k_timeout_t xmit_period;
+    k_timeout_t cmd_period;
     const uint8_t* shared_gpio_channels;
 };
 
@@ -266,7 +269,8 @@ struct sc16is7xx_bridge_info
      */
     void (*on_interrupt)(  //
         const struct sc16is7xx_bridge_info* bridge_info,
-        const struct sc16is7xx_interrupt_info* interrupt_info
+        const struct sc16is7xx_interrupt_info* interrupt_info,
+        uint8_t bridge_index
     );
 };
 

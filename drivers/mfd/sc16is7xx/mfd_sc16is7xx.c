@@ -8,8 +8,8 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/uart.h>
 #include <zephyr/kernel.h>
-#include <zephyr/spinlock.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/spinlock.h>
 
 #ifdef CONFIG_MFD_SC16IS7XX_PM
     #include <zephyr/pm/device.h>
@@ -58,8 +58,7 @@ struct sc16is7xx_bridge_registration
 struct sc16is7xx_device_config
 {
     size_t bridges_cap;
-    struct sc16is7xx_bus bus;
-    struct sc16is7xx_device_info device_info;
+    struct sc16is7xx_device_info* device_info;
 #ifdef MFD_SC16IS7XX_INTERRUPT
     struct sc16is7xx_interrupt_config interrupt;
     #ifdef MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
@@ -73,9 +72,10 @@ struct sc16is7xx_device_config
 
 struct sc16is7xx_device_data
 {
-    bool ready;
+    atomic_t ready;
     size_t bridges_len;
     struct k_mutex bus_lock;
+    struct sc16is7xx_bus bus;
 #ifdef MFD_SC16IS7XX_INTERRUPT
     struct k_spinlock interrupt_lock;
     struct k_work interrupt_work;
@@ -89,7 +89,7 @@ struct sc16is7xx_device_data
 
 static int sc16is7xx_mfd_init_bridges_UNSAFE_(const struct device* mfd_dev);
 
-const struct sc16is7xx_device_info* sc16is7xx_get_device_info( //
+const struct sc16is7xx_device_info* sc16is7xx_get_device_info(  //
     const struct device* mfd_dev
 )
 {
@@ -97,7 +97,8 @@ const struct sc16is7xx_device_info* sc16is7xx_get_device_info( //
 
     if (!mfd_dev) { return NULL; }
 
-    return &config->device_info;
+    config = mfd_dev->config;
+    return config->device_info;
 }
 
 int sc16is7xx_register_bridge(  //
@@ -180,7 +181,7 @@ int sc16is7xx_enqueue_interrupt_work(  //
 #endif
 }
 
-int sc16is7xx_lock_bus( //
+int sc16is7xx_lock_bus(  //
     const struct device* mfd_dev,
     struct sc16is7xx_bus_lock* lock,
     k_timeout_t timeout
@@ -196,7 +197,7 @@ int sc16is7xx_lock_bus( //
     err = k_mutex_lock(&data->bus_lock, timeout);
     if (err) { return err; }
 
-    lock->bus = &config->bus;
+    lock->bus = &data->bus;
     return 0;
 }
 
@@ -214,10 +215,22 @@ int sc16is7xx_unlock_bus(  //
     return k_mutex_unlock(&data->bus_lock);
 }
 
+static inline void sc16is7xx_mfd_command_wait(const struct device* dev)
+{
+    const struct sc16is7xx_device_config* config = dev->config;
+    k_sleep(config->device_info->cmd_period);
+}
+
+static inline void sc16is7xx_mfd_xmit_wait(const struct device* dev)
+{
+    const struct sc16is7xx_device_config* config = dev->config;
+    k_sleep(config->device_info->xmit_period);
+}
+
 static int sc16is7xx_mfd_init_bridges_UNSAFE_(const struct device* mfd_dev)
 {
     struct sc16is7xx_device_data* const data = mfd_dev->data;
-    data->ready = true;
+    atomic_cas(&data->ready, false, true);
     return 0;
 }
 
@@ -233,31 +246,36 @@ static void sc16is7xx_mfd_handle_interrupt(struct k_work* work_item)
     struct sc16is7xx_device_data* const data = CONTAINER_OF(work_item, struct sc16is7xx_device_data, interrupt_work);
     const struct device* const dev = data->own_instance;
     const struct sc16is7xx_device_config* const config = dev->config;
-    const struct sc16is7xx_bus* const bus = &config->bus;
+    struct sc16is7xx_bus_lock bus_lock;
     struct sc16is7xx_interrupt_info interrupt_info;
     k_spinlock_key_t lock_handle;
     int err = 0;
     bool has_interrupts, ready;
 
-    // Maybe it's okay to NOT lock data access before dereferencing `data->ready`.
-    lock_handle = k_spin_lock(&data->interrupt_lock);
-    ready = data->ready;
-    k_spin_unlock(&data->interrupt_lock, lock_handle);
+    ready = atomic_get(&data->ready);
 
     if (!data->ready) { return; }
 
-    for (channel_id = 0; !err && channel_id < config->device_info.total_uart_channels; channel_id++) {
+    for (channel_id = 0; !err && channel_id < config->device_info->total_uart_channels; channel_id++) {
         has_interrupts = true;
 
         while (!err && has_interrupts) {
-            // Maybe it's okay to NOT lock the bus here, because:
-            // 1. This register is read-only; and
-            // 2. It's only read by the MFD driver.
-            reg_addr = SC16IS7XX_REG_IIR(channel_id, SC16IS7XX_REGRW_READ);
-            err = sc16is7xx_bus_read_byte(bus, reg_addr, &reg_value);
+            err = sc16is7xx_lock_bus(dev, &bus_lock, K_FOREVER);
             if (err) {
-                LOG_ERR("Device '%s': Could not read interrupt information!", dev->name);
+                LOG_DBG("Device '%s': Could not lock device bus access! Error code = %d", dev->name, err);
+                return;
+            }
+
+            reg_addr = SC16IS7XX_REG_IIR(channel_id, SC16IS7XX_REGRW_READ);
+            err = sc16is7xx_bus_read_byte(bus_lock.bus, reg_addr, &reg_value);
+            if (err) {
+                LOG_ERR("Device '%s': Could not read interrupt information! Error code = %d", dev->name, err);
                 break;
+            }
+
+            err = sc16is7xx_unlock_bus(dev, &bus_lock);
+            if (err) {
+                LOG_DBG("Device '%s': Could not unlock device bus access! Error code = %d", dev->name, err);
             }
 
             has_interrupts = SC16IS7XX_BITCHECK(reg_value, SC16IS7XX_REGFLD_IIR_STATUS);
@@ -267,7 +285,7 @@ static void sc16is7xx_mfd_handle_interrupt(struct k_work* work_item)
 
             for (i = 0; i < data->bridges_len; ++i) {
                 sub = config->bridges_ptr + i;
-                sub->bridge_info->on_interrupt(sub->bridge_info, &interrupt_info);
+                sub->bridge_info->on_interrupt(sub->bridge_info, &interrupt_info, i);
             }
         }
     }
@@ -282,7 +300,7 @@ static void sc16is7xx_mfd_on_gpio_callback(  //
     struct sc16is7xx_device_data* const data = CONTAINER_OF(cb, struct sc16is7xx_device_data, gpio_interrupt_callback);
     const struct device* const dev = data->own_instance;
     const struct sc16is7xx_device_config* const config = dev->config;
-    const struct sc16is7xx_bus* const bus = &config->bus;
+    const struct sc16is7xx_bus* const bus = &data->bus;
 
     ARG_UNUSED(port);
     ARG_UNUSED(pins);
@@ -351,12 +369,14 @@ static int sc16is7xx_device_validate_dt_info(const struct device* dev)
         is_shared_gpio_channel = false;
 
         if (lhs_bridge_dt->kind == SC16IS7XX_BRIDGE_GPIO) {
-            for (j = 0; !is_shared_gpio_channel && j < config->device_info.shared_gpio_channels_len; j++) {
-                is_shared_gpio_channel = lhs_bridge_dt->channel_id == config->device_info.shared_gpio_channels[j];
+            for (j = 0; !is_shared_gpio_channel && j < config->device_info->shared_gpio_channels_len; j++) {
+                is_shared_gpio_channel = lhs_bridge_dt->channel_id == config->device_info->shared_gpio_channels[j];
             }
         }
 
         for (j = 0; j < config->bridges_cap; j++) {
+            if (i == j) { continue; }
+
             rhs_bridge_dt = config->bridges_dt_info + j;
             is_same_kind = lhs_bridge_dt->kind == rhs_bridge_dt->kind;
             is_same_channel = lhs_bridge_dt->channel_id == rhs_bridge_dt->channel_id;
@@ -366,26 +386,30 @@ static int sc16is7xx_device_validate_dt_info(const struct device* dev)
                     "Device '%s': Duplicate bridge devices detected in the devicetree!"
                     " Child_indexes = [%d, %d], kind = %d, channel = %d",
                     dev->name,
-                    i, j,
+                    i,
+                    j,
                     lhs_bridge_dt->kind,
                     lhs_bridge_dt->channel_id
                 );
-                return -EINVAL;
+                return -EADDRINUSE;
             }
 
 
             if (is_shared_gpio_channel) {
-                is_modem_flow_enabled = rhs_bridge_dt->kind == SC16IS7XX_BRIDGE_UART && rhs_bridge_dt->modem_flow_control_enabled;
+                is_modem_flow_enabled =
+                    rhs_bridge_dt->kind == SC16IS7XX_BRIDGE_UART && rhs_bridge_dt->modem_flow_control_enabled;
 
                 if (is_modem_flow_enabled && is_same_channel) {
                     LOG_ERR(
-                        "Device '%s': A GPIO channel is sharing its port with an UART channel with modem-flow control active!"
+                        "Device '%s': A GPIO channel is sharing its port with an UART channel with modem-flow control "
+                        "active!"
                         " Channel = %d, GPIO child index = %d, UART child index = %d",
                         dev->name,
                         lhs_bridge_dt->channel_id,
-                        i, j
+                        i,
+                        j
                     );
-                    return -EINVAL;
+                    return -EBADF;
                 }
             }
         }
@@ -397,33 +421,52 @@ static int sc16is7xx_device_validate_dt_info(const struct device* dev)
 static int sc16is7xx_device_softreset_UNSAFE_(const struct device* dev)
 {
     const struct sc16is7xx_device_config* config = dev->config;
-    const struct sc16is7xx_bus* bus = &config->bus;
     struct sc16is7xx_device_data* data = dev->data;
+    const struct sc16is7xx_bus* bus = &data->bus;
     uint8_t reg_addr;
     uint8_t reg_data;
     int err;
 
-    reg_addr = SC16IS7XX_REG_IOCONTROL(0, SC16IS7XX_REGRW_WRITE);
+    reg_addr = SC16IS7XX_REG_IOCONTROL(0, SC16IS7XX_REGRW_READ);
     err = sc16is7xx_bus_read_byte(bus, reg_addr, &reg_data);
-    if (err) { return err; }
+    if (err) {
+        LOG_ERR(
+            "Device '%s': Could not read from register IOCONTROL @ 0x%02x! Error code = %d", dev->name, reg_addr, err
+        );
+        return -EIO;
+    }
 
+    reg_addr = SC16IS7XX_REG_IOCONTROL(0, SC16IS7XX_REGRW_WRITE);
     reg_data = SC16IS7XX_BITSET(reg_data, SC16IS7XX_REGFLD_IOCONTROL_SOFTRESET);
-    err = sc16is7xx_bus_write_byte(bus, reg_addr, reg_data);
-    if (err) { return err; }
 
-    return err;
+    // NOTE According to the datasheet, for some bewildering reason we don't know,
+    // the device returns NACK upon receiving a value on IOCONTROL that has the
+    // RESET bit set. This means that, for a software reset we are forced to just
+    // send the command, and hope for the best.
+    sc16is7xx_bus_write_byte(bus, reg_addr, reg_data);
+
+    sc16is7xx_mfd_command_wait(dev);
+
+    return 0;
 }
 
 static int sc16is7xx_device_init(const struct device* dev)
 {
     const struct sc16is7xx_device_config* config = dev->config;
-    const struct sc16is7xx_bus* bus = &config->bus;
     struct sc16is7xx_device_data* data = dev->data;
+    const struct sc16is7xx_bus* bus = &data->bus;
+    uint8_t reg_addr;
+    uint8_t reg_data;
+    uint8_t spr_data;
     int err;
 
+    config->device_info->xtal_period = K_NSEC(1000000000UL / config->device_info->xtal_freq);
+    config->device_info->xmit_period = K_NSEC((1000000000UL / config->device_info->xtal_freq) * 2);
+    config->device_info->xtal_period = K_MSEC(10);
+
     err = sc16is7xx_bus_check(bus);
-    if (err < 0) {
-        LOG_ERR("Device '%s': Bus not ready!", dev->name);
+    if (err) {
+        LOG_ERR("Device '%s': Bus is not ready!", dev->name);
         return err;
     }
 
@@ -431,36 +474,88 @@ static int sc16is7xx_device_init(const struct device* dev)
     data->own_instance = dev;
 
     err = k_mutex_init(&data->bus_lock);
-    if (err) { return err; }
+    if (err) {
+        LOG_ERR("Device '%s': Could not initialize bus lock object! Error code = %d", dev->name, err);
+        return err;
+    }
 
     err = sc16is7xx_device_validate_dt_info(dev);
-    if (err) { return err; }
+    if (err) {
+        LOG_ERR("Device '%s': Sub-devicetree validation failed! Error code = %d", dev->name, err);
+        return err;
+    }
 
 #ifdef MFD_SC16IS7XX_INTERRUPT
-#ifdef MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
-    k_work_queue_start(  //
-        &data->interrupt_queue,
-        config->interrupt_queue_stack_area,
-        config->interrupt_queue_stack_len,
-        CONFIG_MFD_SC16IS7XX_INTERRUPT_THREAD_PRIORITY,
-        NULL
-    );
+    if (!config->interrupt.on_setup) {
+        LOG_INF(
+            "Device '%s': Hardware interrupts are not enabled in the devicetree. Ignoring interrupt setup.", dev->name
+        );
+    } else {
+    #ifdef MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
+        k_work_queue_start(  //
+            &data->interrupt_queue,
+            config->interrupt_queue_stack_area,
+            config->interrupt_queue_stack_len,
+            CONFIG_MFD_SC16IS7XX_INTERRUPT_THREAD_PRIORITY,
+            NULL
+        );
+    #endif
+        k_work_init(&data->interrupt_work, sc16is7xx_mfd_handle_interrupt);
+
+        err = config->interrupt.on_setup(dev);
+        if (err) {
+            LOG_ERR(
+                "Device '%s': Could not set up device GPIO-based device interrupts! Error code = %d", dev->name, err
+            );
+            return err;
+        }
+    }
 #endif
 
-    k_work_init(&data->interrupt_work, sc16is7xx_mfd_handle_interrupt);
+    spr_data = 123;
 
-    if (!config->interrupt.on_setup) { return -EINVAL; }
-    err = config->interrupt.on_setup(dev);
-    if (err != 0) { return err; }
-#endif
+    reg_addr = SC16IS7XX_REG_SPR(0, SC16IS7XX_REGRW_WRITE);
+    err = sc16is7xx_bus_write_byte(bus, reg_addr, spr_data);
+    if (err) {
+        LOG_ERR(
+            "Device '%s': Could not write '%d' to register SPR @ 0x%02x! Error code = %d",
+            dev->name,
+            spr_data,
+            reg_addr,
+            err
+        );
+        return -EIO;
+    }
+
+    reg_addr = SC16IS7XX_REG_SPR(0, SC16IS7XX_REGRW_READ);
+    err = sc16is7xx_bus_read_byte(bus, reg_addr, &reg_data);
+    if (err) {
+        LOG_ERR(
+            "Device '%s': Could not read back from register SPR @ 0x%02x! Error code = %d", dev->name, reg_addr, err
+        );
+        return -EIO;
+    }
+
+    if (spr_data != reg_data) {
+        LOG_WRN(
+            "Device '%s': Quick bus test failed! Register SPR @ 0x%02x returned a different value! Expected = %d, Got "
+            "= %d!",
+            dev->name,
+            reg_addr,
+            spr_data,
+            reg_addr
+        );
+    } else {
+        LOG_DBG("Device '%s': Quick bus test succeeded. SPR @ 0x%02x = %d", dev->name, reg_addr, reg_data);
+    }
 
     err = sc16is7xx_device_softreset_UNSAFE_(dev);
-    if (err) { return err; }
-
-    data->ready = false;
+    if (err) {
+        LOG_ERR("Device '%s': Could not soft-reset the device! Error code = %d", dev->name, err);
+        return err;
+    }
 
     return err;
-    return 0;
 }
 
 #define DT_INST_SC16IS7XX_CHILDREN_LEN_1_(inst) (1)
@@ -469,6 +564,19 @@ static int sc16is7xx_device_init(const struct device* dev)
 
 #define DT_INST_SC16IS7XX(inst, pn_suffix) \
     DT_INST(inst, COND_CODE_1(DT_INST_ON_BUS(inst, spi), (nxp_sc16is##pn_suffix##_spi), (nxp_sc16is##pn_suffix##_i2c)))
+
+#define SC16IS7XX_CONFIG_DEVICE_INFO(inst, pn_suffix) \
+    { \
+     .total_uart_channels = DT_INST_PROP(inst, total_uart_channels), \
+     .total_gpio_channels = DT_INST_PROP(inst, total_gpio_channels), \
+     .shared_gpio_channels_len = DT_INST_PROP_LEN(inst, shared_gpio_channels), \
+     .supports_hw_interrupts = \
+         MFD_SC16IS7XX_INTERRUPT_ENABLED && (DT_INST_NODE_HAS_PROP(inst, interrupt_gpios)), \
+     .supports_modem_flow_control = DT_INST_PROP(inst, supports_modem_flow_control), \
+     .part_id = DT_INST_ENUM_IDX(inst, part_number), \
+     .xtal_freq = DT_INST_PROP(inst, xtal_freq), \
+     .shared_gpio_channels = sc16is##pn_suffix##_device_shared_gpio_channels_##inst, \
+    }
 
 #define SC16IS7XX_CONFIG_COMMON_PROPS(inst, pn_suffix) \
     COND_CODE_1( \
@@ -491,27 +599,18 @@ static int sc16is7xx_device_init(const struct device* dev)
           .interrupt_queue_stack_area = &sc16is##pn_suffix##_device_interrupt_stack_area_##inst, ), \
          () \
      ) \
-         .device_info.total_uart_channels = DT_INST_PROP(inst, total_uart_channels), \
-     .device_info.total_gpio_channels = DT_INST_PROP(inst, total_gpio_channels), \
-     .device_info.shared_gpio_channels_len = DT_INST_PROP_LEN(inst, shared_gpio_channels), \
-     .device_info.supports_hw_interrupts = MFD_SC16IS7XX_INTERRUPT_ENABLED && (DT_INST_NODE_HAS_PROP(inst, interrupt_gpios)), \
-     .device_info.supports_modem_flow_control = DT_INST_PROP(inst, supports_modem_flow_control), \
-     .device_info.part_id = DT_INST_ENUM_IDX(inst, part_number), \
-     .device_info.xtal_freq = DT_INST_PROP(inst, xtal_freq), \
-     .device_info.shared_gpio_channels = sc16is##pn_suffix##_device_shared_gpio_channels_##inst, \
+     .device_info = &sc16is##pn_suffix##_device_info_##inst, \
      .bridges_dt_info = sc16is##pn_suffix##_device_bridges_dt_info_##inst, \
      .bridges_cap = DT_INST_SC16IS7XX_CHILDREN_LEN(inst), .bridges_ptr = sc16is##pn_suffix##_device_subs_##inst
 
-#define SC16IS7XX_CONFIG_SPI(inst, pn_suffix) \
+#define SC16IS7XX_DATA_SPI(inst, pn_suffix) \
     { \
-        .bus.dev.spi = SPI_DT_SPEC_INST_GET(inst, SC16IS7XX_SPI_OPERATION, 0), .bus.api = &sc16is7xx_bus_api_spi, \
-        SC16IS7XX_CONFIG_COMMON_PROPS(inst, pn_suffix) \
+        .bus.dev.spi = SPI_DT_SPEC_INST_GET(inst, SC16IS7XX_SPI_OPERATION, 0), .bus.api = &sc16is7xx_bus_api_spi, .ready = ATOMIC_INIT(0) \
     }
 
-#define SC16IS7XX_CONFIG_I2C(inst, pn_suffix) \
+#define SC16IS7XX_DATA_I2C(inst, pn_suffix) \
     { \
-        .bus.dev.i2c = I2C_DT_SPEC_INST_GET(inst), .bus.api = &sc16is7xx_bus_api_i2c, \
-        SC16IS7XX_CONFIG_COMMON_PROPS(inst, pn_suffix) \
+        .bus.dev.i2c = I2C_DT_SPEC_INST_GET(inst), .bus.api = &sc16is7xx_bus_api_i2c, .ready = ATOMIC_INIT(0) \
     }
 
 #define SC16IS7XX_DEFINE_BRIDGE_DT(resolved_inst) \
@@ -538,10 +637,11 @@ static int sc16is7xx_device_init(const struct device* dev)
             DT_INST_PROP(inst, shared_gpio_channels); \
     static struct sc16is7xx_bridge_registration \
         sc16is##pn_suffix##_device_subs_##inst[DT_INST_SC16IS7XX_CHILDREN_LEN(inst)]; \
-    static struct sc16is7xx_device_data sc16is##pn_suffix##_device_data_##inst = {0}; \
-    static const struct sc16is7xx_device_config sc16is##pn_suffix##_device_config_##inst = COND_CODE_1( \
-        DT_INST_ON_BUS(inst, spi), (SC16IS7XX_CONFIG_SPI(inst, pn_suffix)), (SC16IS7XX_CONFIG_I2C(inst, pn_suffix)) \
+    static struct sc16is7xx_device_info sc16is##pn_suffix##_device_info_##inst = SC16IS7XX_CONFIG_DEVICE_INFO(inst, pn_suffix); \
+    static struct sc16is7xx_device_data sc16is##pn_suffix##_device_data_##inst = COND_CODE_1( \
+        DT_INST_ON_BUS(inst, spi), (SC16IS7XX_DATA_SPI(inst, pn_suffix)), (SC16IS7XX_DATA_I2C(inst, pn_suffix)) \
     ); \
+    static const struct sc16is7xx_device_config sc16is##pn_suffix##_device_config_##inst = { SC16IS7XX_CONFIG_COMMON_PROPS(inst, pn_suffix) }; \
     DEVICE_DT_DEFINE( \
         DT_INST_SC16IS7XX(inst, pn_suffix), \
         sc16is7xx_device_init, \

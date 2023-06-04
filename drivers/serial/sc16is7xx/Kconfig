@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-menuconfig UART_SC16IS7XX
+config UART_SC16IS7XX
   bool "UART Bridge device for the SC16IS7XX Single/Dual UART bridge with I2C-bus/SPI interface"
   default y
   depends on MFD_SC16IS7XX && (\
@@ -21,7 +21,7 @@ if UART_SC16IS7XX
 
 config UART_SC16IS7XX_INIT_PRIORITY
   int "SC16IS7XX UART controller initialization priority"
-  default 76
+  default 75
   help
     Sets the children UART controllers' initialization priorities.
 

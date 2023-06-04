@@ -6,12 +6,6 @@
 
 LOG_MODULE_REGISTER(nxp_sc16is7xx_gpio_controller, CONFIG_GPIO_LOG_LEVEL);
 
-struct sc16is7xx_gpio_pins_config
-{
-    uint8_t configured_as_outputs; /* 0 for input, 1 for output */
-    uint8_t outputs_state;
-};
-
 struct sc16is7xx_gpio_config
 {
     struct gpio_driver_config common;
@@ -22,7 +16,6 @@ struct sc16is7xx_gpio_config
 struct sc16is7xx_gpio_data
 {
     struct gpio_driver_data common;
-    struct sc16is7xx_gpio_pins_config pins_cfg;
     sys_slist_t callbacks;
     struct k_sem lock;
     struct sc16is7xx_bridge_info bridge_info;
@@ -31,57 +24,101 @@ struct sc16is7xx_gpio_data
     uint8_t input_port_last;
 };
 
-static inline gpio_port_value_t sc16is7xx_gpio_to_public_port_value(const struct device* dev, uint8_t state)
+static inline void sc16is7xx_gpio_command_wait(const struct device* dev)
+{
+    const struct sc16is7xx_gpio_data* data = dev->data;
+    k_sleep(data->device_info->cmd_period);
+}
+
+static inline void sc16is7xx_gpio_xmit_wait(const struct device* dev)
+{
+    const struct sc16is7xx_gpio_data* data = dev->data;
+    k_sleep(data->device_info->xmit_period);
+}
+
+static inline gpio_port_value_t sc16is7xx_gpio_public_port_value(const struct device* dev, uint8_t state)
 {
     const struct sc16is7xx_gpio_config* config = dev->config;
     const struct sc16is7xx_gpio_data* data = dev->data;
-    return state >> (config->ngpios * data->bridge_info.channel_id);
+    return (state >> (config->ngpios * data->bridge_info.channel_id)) & config->common.port_pin_mask;
 }
 
-static inline uint8_t sc16is7xx_gpio_current_public_output_mask(const struct device* dev)
+static inline uint8_t sc16is7xx_gpio_raw_pin_mask(const struct device* dev)
 {
     const struct sc16is7xx_gpio_config* config = dev->config;
     const struct sc16is7xx_gpio_data* data = dev->data;
     return config->common.port_pin_mask << (config->ngpios * data->bridge_info.channel_id);
 }
 
-static inline uint8_t sc16is7xx_gpio_raw_ngpios_mask(const struct device* dev)
+static void sc16is7xx_bridge_log_registers_UNSAFE_(const struct device* dev, struct sc16is7xx_bus* bus)
 {
-    const struct sc16is7xx_gpio_config* config = dev->config;
-    const struct sc16is7xx_gpio_data* data = dev->data;
-    return data->pins_cfg.configured_as_outputs >> (config->ngpios * data->bridge_info.channel_id);
+    uint8_t reg_addr;
+    uint8_t reg_value;
+    int err;
+
+    reg_addr = SC16IS7XX_REG_IOCONTROL(0, SC16IS7XX_REGRW_READ);
+    err = sc16is7xx_bus_read_byte(bus, reg_addr, &reg_value);
+    if (!err) {
+        LOG_DBG("Device '%s': IOCONTROL @ 0x%02x = 0x%02x", dev->name, reg_addr, reg_value);
+    } else {
+        LOG_WRN("Device '%s': Could not read IOCONTROL @ 0x%02x", dev->name, reg_addr);
+    }
+
+    reg_addr = SC16IS7XX_REG_IODIR(0, SC16IS7XX_REGRW_READ);
+    err = sc16is7xx_bus_read_byte(bus, reg_addr, &reg_value);
+    if (!err) {
+        LOG_DBG("Device '%s': IODIR @ 0x%02x = 0x%02x", dev->name, reg_addr, reg_value);
+    } else {
+        LOG_WRN("Device '%s': Could not read IODIR @ 0x%02x", dev->name, reg_addr);
+    }
+
+    reg_addr = SC16IS7XX_REG_IOSTATE(0, SC16IS7XX_REGRW_READ);
+    err = sc16is7xx_bus_read_byte(bus, reg_addr, &reg_value);
+    if (!err) {
+        LOG_DBG("Device '%s': IOSTATE @ 0x%02x = 0x%02x", dev->name, reg_addr, reg_value);
+    } else {
+        LOG_WRN("Device '%s': Could not read IOSTATE @ 0x%02x", dev->name, reg_addr);
+    }
+
+    reg_addr = SC16IS7XX_REG_IOINTENA(0, SC16IS7XX_REGRW_READ);
+    err = sc16is7xx_bus_read_byte(bus, reg_addr, &reg_value);
+    if (!err) {
+        LOG_DBG("Device '%s': IOINTENA @ 0x%02x = 0x%02x", dev->name, reg_addr, reg_value);
+    } else {
+        LOG_WRN("Device '%s': Could not read IOINTENA @ 0x%02x", dev->name, reg_addr);
+    }
 }
 
 static int sc16is7xx_gpio_process_input_UNSAFE_(  //
     const struct device* dev,
     gpio_port_value_t* value,
-    const struct sc16is7xx_bus* bus
+    struct sc16is7xx_bus* bus
 )
 {
     const struct sc16is7xx_gpio_config* config = dev->config;
     struct sc16is7xx_gpio_data* data = dev->data;
     uint8_t reg_addr;
     uint8_t reg_value;
-    uint8_t rx_buf;
     int err = 0;
 
     reg_addr = SC16IS7XX_REG_IOSTATE(0, SC16IS7XX_REGRW_READ);
-    err = sc16is7xx_bus_read_byte(bus, reg_addr, &rx_buf);
+    err = sc16is7xx_bus_read_byte(bus, reg_addr, &reg_value);
     if (err != 0) {
-        LOG_ERR("Device '%s': failed to read from device: %d", dev->name, err);
+        LOG_DBG("Device '%s': failed to read from device: %d", dev->name, err);
         return -EIO;
     }
 
-    if (value) { *value = sc16is7xx_gpio_to_public_port_value(dev, rx_buf); }
+    if (value) { *value = sc16is7xx_gpio_public_port_value(dev, reg_value); }
 
-    data->input_port_last = rx_buf;
+    bus->regs.iostate = reg_value;
 
     return err;
 }
 
 static void sc16is7xx_gpio_handle_interrupt(  //
     const struct sc16is7xx_bridge_info* bridge_info,
-    const struct sc16is7xx_interrupt_info* interrupt_info
+    const struct sc16is7xx_interrupt_info* interrupt_info,
+    uint8_t bridge_index
 )
 {
     uint8_t interrupt_id = SC16IS7XX_GETVALUE(interrupt_info->iir, SC16IS7XX_REGFLD_IIR_ID);
@@ -95,47 +132,64 @@ static void sc16is7xx_gpio_handle_interrupt(  //
     const struct device* const dev = data->own_instance;
     const struct sc16is7xx_gpio_config* const config = dev->config;
     struct sc16is7xx_bus_lock bus_lock;
-    int err = 0;
-
-    err = k_sem_take(&data->lock, K_FOREVER);
-    if (err) {
-        LOG_ERR("Device '%s': Could not lock data access!", dev->name);
-        return;
-    }
-
-    uint8_t raw_port_mask = sc16is7xx_gpio_current_public_output_mask(dev);
+    bool bus_locked = false;
+    uint8_t raw_port_mask;
     uint32_t changed_pins;
     uint8_t curr_input_port_last;
-    uint8_t prev_input_port_last = data->input_port_last;
+    uint8_t prev_input_port_last;
+    uint8_t inputs_mask;
+    int err = 0;
 
     err = sc16is7xx_lock_bus(config->parent_dev, &bus_lock, K_FOREVER);
     if (err) {
-        LOG_ERR("Device '%s': Could not lock device bus access!", dev->name);
-        goto end;
+        LOG_DBG("Device '%s': Could not lock device bus access!", dev->name);
+        return;
     }
 
-    err = sc16is7xx_gpio_process_input_UNSAFE_(dev, NULL, bus_lock.bus);
-    if (err) {
-        LOG_ERR("Device '%s': Could not process input at interrupt time!", dev->name);
-        goto end;
+    bus_locked = true;
+    raw_port_mask = sc16is7xx_gpio_raw_pin_mask(dev);
+    inputs_mask = ~bus_lock.bus->regs.iodir;
+
+    if (bridge_index == 0) {
+        bus_lock.bus->prev_regs.iostate = bus_lock.bus->regs.iostate;
+
+        err = sc16is7xx_gpio_process_input_UNSAFE_(dev, NULL, bus_lock.bus);
+        if (err) {
+            LOG_DBG("Device '%s': Could not process input at interrupt time!", dev->name);
+            goto end;
+        }
+
+        bus_lock.bus->curr_regs.iostate = bus_lock.bus->regs.iostate;
     }
+
+    prev_input_port_last = bus_lock.bus->prev_regs.iostate & inputs_mask & raw_port_mask;
+    curr_input_port_last = bus_lock.bus->curr_regs.iostate & inputs_mask & raw_port_mask;
 
     err = sc16is7xx_unlock_bus(config->parent_dev, &bus_lock);
-    if (err) { LOG_ERR("Device '%s': Could not unlock device bus access!", dev->name); }
-
-    curr_input_port_last = data->input_port_last & raw_port_mask;
-    prev_input_port_last = prev_input_port_last & raw_port_mask;
+    if (err) { LOG_DBG("Device '%s': Could not unlock device bus access! Error code = %d", dev->name, err); }
+    bus_locked = false;
 
     if (curr_input_port_last != prev_input_port_last && !err) {
         changed_pins = curr_input_port_last;
         changed_pins ^= prev_input_port_last;
-        changed_pins = sc16is7xx_gpio_to_public_port_value(dev, changed_pins);
+        changed_pins = sc16is7xx_gpio_public_port_value(dev, changed_pins);
+
+        // err = k_sem_take(&data->lock, K_FOREVER);
+        // if (err) {
+        //     LOG_DBG("Device '%s': Could not lock internal data access! Error code = %d", dev->name, err);
+        //     goto end;
+        // }
+
         gpio_fire_callbacks(&data->callbacks, dev, changed_pins);
+
+        // k_sem_give(&data->lock);
     }
 
 end:
-    if (err) { LOG_ERR("Device '%s': Failed to read interrupt sources: %d", dev->name, err); }
-    k_sem_give(&data->lock);
+    if (err) { LOG_DBG("Device '%s': Failed to read interrupt sources: %d", dev->name, err); }
+    if (bus_locked && !sc16is7xx_unlock_bus(config->parent_dev, &bus_lock)) {
+        LOG_DBG("Device '%s': Failed to unlock device bus access!", dev->name);
+    }
 }
 
 static int sc16is7xx_gpio_port_set_raw(  //
@@ -145,25 +199,18 @@ static int sc16is7xx_gpio_port_set_raw(  //
     uint8_t toggle
 )
 {
-    const struct sc16is7xx_bus* bus;
+    struct sc16is7xx_bus* bus;
     const struct sc16is7xx_gpio_config* config = dev->config;
     struct sc16is7xx_gpio_data* data = dev->data;
     struct sc16is7xx_bus_lock bus_lock;
     uint8_t reg_addr;
     uint8_t reg_value;
-    uint8_t tx_buf;
+    uint8_t pin_dirs;
+    uint8_t pin_states;
+    uint8_t pin_shift = (config->ngpios * data->bridge_info.channel_id);
     int err = 0;
 
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
-
-    if ((data->pins_cfg.configured_as_outputs & value) != value) {
-        LOG_ERR("Device '%s': Pin(s) is/are configured as input which should be output.", dev->name);
-        return -EOPNOTSUPP;
-    }
-
-    tx_buf = (data->pins_cfg.outputs_state & ~mask);
-    tx_buf |= (value & mask);
-    tx_buf ^= toggle;
 
     err = sc16is7xx_lock_bus(config->parent_dev, &bus_lock, K_FOREVER);
     if (err) {
@@ -172,26 +219,33 @@ static int sc16is7xx_gpio_port_set_raw(  //
     }
     bus = bus_lock.bus;
 
-    reg_addr = SC16IS7XX_REG_IOSTATE(0, SC16IS7XX_REGRW_WRITE);
-    err = sc16is7xx_bus_write(bus, reg_addr, &tx_buf, sizeof(tx_buf));
+    mask = (mask & 0x0f) << pin_shift;
+    value = (value & 0x0f) << pin_shift;
+    toggle = (toggle & 0x0f) << pin_shift;
 
-    if (err != 0) {
-        LOG_ERR("Device '%s': failed to write output port: %d", dev->name, err);
-        err = -EIO;
-    }
+    reg_value = (bus->regs.iostate & ~(mask << pin_shift));
+    reg_value |= (value & mask);
+    reg_value ^= toggle;
+
+    reg_addr = SC16IS7XX_REG_IOSTATE(0, SC16IS7XX_REGRW_WRITE);
+    err = sc16is7xx_bus_write(bus, reg_addr, &reg_value, sizeof(reg_value));
 
     if (err) {
-        if (sc16is7xx_unlock_bus(config->parent_dev, &bus_lock)) {
-            LOG_ERR("Device '%s': Could not unlock device bus access!", dev->name);
-        }
-        return err;
+        LOG_DBG("Device '%s': failed to write output port! Error code = %d", dev->name, err);
+        err = -EIO;
+        goto end;
     }
 
-    k_sem_take(&data->lock, K_FOREVER);
-    data->pins_cfg.outputs_state = tx_buf;
-    k_sem_give(&data->lock);
+    sc16is7xx_gpio_xmit_wait(dev);
 
-    return 0;
+    bus->regs.iostate = reg_value;
+
+end:
+    if (sc16is7xx_unlock_bus(config->parent_dev, &bus_lock)) {
+        LOG_DBG("Device '%s': Could not unlock device bus access!", dev->name);
+    }
+
+    return err;
 }
 
 static int sc16is7xx_gpio_port_get_raw(const struct device* dev, gpio_port_value_t* value)
@@ -199,38 +253,28 @@ static int sc16is7xx_gpio_port_get_raw(const struct device* dev, gpio_port_value
     const struct sc16is7xx_gpio_config* config = dev->config;
     struct sc16is7xx_gpio_data* data = dev->data;
     struct sc16is7xx_bus_lock bus_lock;
-    uint8_t public_output_mask = sc16is7xx_gpio_current_public_output_mask(dev);
+    uint8_t raw_pin_mask = sc16is7xx_gpio_raw_pin_mask(dev);
     uint8_t* value8 = (uint8_t*) value;
     int err;
 
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
 
-    if ((~public_output_mask & *value8) != *value8) {
-        LOG_ERR("Device '%s': Pin(s) is/are configured as output which should be input.", dev->name);
+    if ((~raw_pin_mask & *value8) != *value8) {
+        LOG_DBG("Device '%s': Pin(s) are configured as output which should be input.", dev->name);
         return -EOPNOTSUPP;
     }
 
-    err = k_sem_take(&data->lock, K_FOREVER);
-    if (err) { return err; }
-
     err = sc16is7xx_lock_bus(config->parent_dev, &bus_lock, K_FOREVER);
     if (err) {
-        LOG_ERR("Device '%s': Could not lock device bus access! Error code = %d", dev->name, err);
-        k_sem_give(&data->lock);
+        LOG_DBG("Device '%s': Could not lock device bus access! Error code = %d", dev->name, err);
         return -EIO;
     }
 
-    /**
-     * Reading of the input port also clears the generated interrupt,
-     * thus the configured callbacks must be fired also here if needed.
-     */
     err = sc16is7xx_gpio_process_input_UNSAFE_(dev, value, bus_lock.bus);
 
     if (sc16is7xx_unlock_bus(config->parent_dev, &bus_lock)) {
-        LOG_ERR("Device '%s': Could not unlock device bus access!", dev->name);
+        LOG_DBG("Device '%s': Could not unlock device bus access!", dev->name);
     }
-
-    k_sem_give(&data->lock);
 
     return err;
 }
@@ -269,41 +313,79 @@ static int sc16is7xx_gpio_pin_interrupt_configure(  //
     const struct sc16is7xx_gpio_data* data = dev->data;
     const struct sc16is7xx_gpio_config* config = dev->config;
     const struct device* const parent_dev = config->parent_dev;
-    const struct sc16is7xx_bus* bus;
+    struct sc16is7xx_bus* bus;
     struct sc16is7xx_bus_lock bus_lock;
     uint8_t reg_addr;
     uint8_t reg_value;
+    uint8_t pin_shift = (config->ngpios * data->bridge_info.channel_id);
     int err = 0;
     uint8_t pin_bit = BIT(pin);
 
-    if (!data->device_info->supports_hw_interrupts) { return -ENOTSUP; }
+    if (!data->device_info->supports_hw_interrupts) {
+        LOG_DBG(
+            "Device '%s', pin %d: Hardware interrupts are not enabled at the MFD level. Check the parent DTS node's "
+            "configuration.",
+            dev->name,
+            pin
+        );
+        return -ENOTSUP;
+    }
 
-    if (mode != GPIO_INT_MODE_DISABLED || mode != GPIO_INT_MODE_LEVEL) { return -ENOTSUP; }
+    if (mode != GPIO_INT_MODE_DISABLED || mode != GPIO_INT_MODE_LEVEL) {
+        LOG_DBG("Device '%s', pin %d: Unsupported interrupt mode '%d'", dev->name, pin, mode);
+        return -ENOTSUP;
+    }
 
-    if (trig != GPIO_INT_TRIG_BOTH) { return -ENOTSUP; }
+    if (trig != GPIO_INT_TRIG_BOTH) {
+        LOG_DBG("Device '%s', pin %d: Unsupported interrupt trigger '%d'", dev->name, pin, trig);
+        return -ENOTSUP;
+    }
 
     err = sc16is7xx_lock_bus(config->parent_dev, &bus_lock, K_FOREVER);
     if (err) {
-        LOG_ERR("Device '%s': Could not lock device bus access! Error code = %d", dev->name, err);
+        LOG_DBG(
+            "Device '%s': Could not configure interrupts, failed to lock device bus access! Error code = %d",
+            dev->name,
+            err
+        );
         return -EIO;
     }
 
     reg_addr = SC16IS7XX_REG_IOINTENA(0, SC16IS7XX_REGRW_READ);
     err = sc16is7xx_bus_read_byte(bus, reg_addr, &reg_value);
     if (err) {
+        LOG_DBG(
+            "Device '%s': Could not configure interrupts, failed to read register 'IOINTENA@0x%02x'! Error code = %d",
+            dev->name,
+            reg_addr,
+            err
+        );
         err = -EIO;
         goto end;
     }
 
     if (mode == GPIO_INT_MODE_DISABLED) {
-        reg_value = reg_value & ~(pin_bit << data->bridge_info.channel_id);
+        reg_value = reg_value & ~(pin_bit << pin_shift);
     } else {
-        reg_value = reg_value | (pin_bit << data->bridge_info.channel_id);
+        reg_value = reg_value | (pin_bit << pin_shift);
     }
 
     reg_addr = SC16IS7XX_REG_IOINTENA(0, SC16IS7XX_REGRW_WRITE);
     err = sc16is7xx_bus_write_byte(bus, reg_addr, reg_value);
-    if (err) { err = -EIO; }
+    if (err) {
+        LOG_DBG(
+            "Device '%s': Could not configure interrupts, failed to write register 'IOINTENA@0x%02x = 0x%02x'! Error "
+            "code = %d",
+            dev->name,
+            reg_addr,
+            reg_value,
+            err
+        );
+        err = -EIO;
+        goto end;
+    }
+
+    sc16is7xx_gpio_command_wait(dev);
 
 end:
     if (sc16is7xx_unlock_bus(config->parent_dev, &bus_lock)) {
@@ -326,12 +408,12 @@ static int sc16is7xx_gpio_manage_callback(  //
     // In the "original" driver (where this was copied from, pcf8574),
     // there was no lock in place.
 
-    err = k_sem_take(&data->lock, K_FOREVER);
-    if (err) { return err; }
+    // err = k_sem_take(&data->lock, K_FOREVER);
+    // if (err) { return err; }
 
     err = gpio_manage_callback(&data->callbacks, callback, set);
 
-    k_sem_give(&data->lock);
+    // k_sem_give(&data->lock);
 
     return err;
 }
@@ -341,67 +423,75 @@ static int sc16is7xx_gpio_pin_configure(const struct device* dev, gpio_pin_t pin
     struct sc16is7xx_gpio_data* data = dev->data;
     const struct sc16is7xx_gpio_config* config = dev->config;
     struct sc16is7xx_bus_lock bus_lock;
-    uint8_t temp_pins;
-    uint8_t temp_outputs;
     uint8_t reg_addr;
     uint8_t reg_value;
     bool bus_locked = false;
+    uint8_t pin_states = 0;
+    uint8_t pin_dirs = 0;
+    uint8_t pin_shift = (config->ngpios * data->bridge_info.channel_id);
     int err = 0;
 
     // RANT: Datasheet is not even clear what is the default state of GPIOs;
     // more specifically if a pin is put in input mode, is it open-drain? open-collector?
-    if (flags & (GPIO_PULL_UP | GPIO_PULL_DOWN | GPIO_DISCONNECTED | GPIO_SINGLE_ENDED)) { return -ENOTSUP; }
+    if (flags == GPIO_DISCONNECTED || flags & GPIO_PULL_UP || flags & GPIO_PULL_DOWN || flags & GPIO_SINGLE_ENDED
+        || flags & GPIO_ACTIVE_LOW || flags & GPIO_OUTPUT_INIT_LOGICAL) {
+        return -ENOTSUP;
+    }
 
     err = sc16is7xx_lock_bus(config->parent_dev, &bus_lock, K_FOREVER);
     if (err) {
-        LOG_ERR("Device '%s': Could not lock device bus access! Error code = %d", dev->name, err);
+        LOG_DBG("Device '%s': Could not lock device bus access! Error code = %d", dev->name, err);
         return -EIO;
     }
+
     bus_locked = true;
-
-    reg_addr = SC16IS7XX_REG_IOSTATE(0, SC16IS7XX_REGRW_READ);
-    err = sc16is7xx_bus_read_byte(bus_lock.bus, reg_addr, &temp_pins);
-    if (err) {
-        err = -EIO;
-        goto end;
-    }
-
-    reg_addr = SC16IS7XX_REG_IODIR(0, SC16IS7XX_REGRW_READ);
-    err = sc16is7xx_bus_read_byte(bus_lock.bus, reg_addr, &temp_outputs);
-    if (err) {
-        err = -EIO;
-        goto end;
-    }
+    pin_states = bus_lock.bus->regs.iostate;
+    pin_dirs = bus_lock.bus->regs.iodir;
 
     if (flags & GPIO_INPUT) {
-        temp_outputs &= ~(BIT(pin) << data->bridge_info.channel_id);
-        temp_pins &= ~((1 << pin) << data->bridge_info.channel_id);
+        pin_dirs &= ~(BIT(pin) << pin_shift);
     } else if (flags & GPIO_OUTPUT) {
-        temp_outputs |= (BIT(pin) << data->bridge_info.channel_id);
+        pin_dirs |= (BIT(pin) << pin_shift);
     }
 
-    if (flags & GPIO_OUTPUT_INIT_HIGH) { temp_pins |= ((1 << pin) << data->bridge_info.channel_id); }
+    if (flags & GPIO_OUTPUT_INIT_HIGH) {
+        pin_states |= (BIT(pin) << pin_shift);
+    } else {
+        pin_states &= ~(BIT(pin) << pin_shift);
+    }
 
-    if (flags & GPIO_OUTPUT_INIT_LOW) { temp_pins &= ~((1 << pin) << data->bridge_info.channel_id); }
+    LOG_DBG(
+        "Device '%s': Configuring pin: channel = %d, pin = %d, IOSTATE = 0x%02x, IODIR = 0x%02x",
+        dev->name,
+        data->bridge_info.channel_id,
+        pin,
+        pin_states,
+        pin_dirs
+    );
 
     reg_addr = SC16IS7XX_REG_IODIR(0, SC16IS7XX_REGRW_WRITE);
-    err = sc16is7xx_bus_write_byte(bus_lock.bus, reg_addr, temp_outputs);
+    err = sc16is7xx_bus_write_byte(bus_lock.bus, reg_addr, pin_dirs);
     if (err) {
+        LOG_DBG("Device '%s': Could not configure direction for pin '%d'! Error code = %d", dev->name, pin, err);
         err = -EIO;
         goto end;
     }
+
+    bus_lock.bus->regs.iodir = pin_dirs;
 
     reg_addr = SC16IS7XX_REG_IOSTATE(0, SC16IS7XX_REGRW_WRITE);
-    err = sc16is7xx_bus_write_byte(bus_lock.bus, reg_addr, temp_pins);
+    err = sc16is7xx_bus_write_byte(bus_lock.bus, reg_addr, pin_states);
     if (err) {
+        LOG_DBG("Device '%s': Could not configure initial state for pin '%d'! Error code = %d", dev->name, pin, err);
         err = -EIO;
         goto end;
     }
 
-    k_sem_take(&data->lock, K_FOREVER);
-    data->pins_cfg.outputs_state = temp_pins;
-    data->pins_cfg.configured_as_outputs = temp_outputs;
-    k_sem_give(&data->lock);
+    bus_lock.bus->regs.iostate = pin_states;
+
+    sc16is7xx_gpio_command_wait(dev);
+
+    sc16is7xx_bridge_log_registers_UNSAFE_(dev, bus_lock.bus);
 
 end:
     if (bus_locked) {
@@ -431,7 +521,8 @@ static int sc16is7xx_gpio_init(const struct device* dev)
 
     if (!device_is_ready(parent_dev)) {
         err = -ENODEV;
-        LOG_ERR("Device '%s': Parent MFD instance was not initialized yet! Error code = %d", dev->name, err);
+        LOG_ERR("Device '%s': Parent MFD instance was not initialized! Error code = %d", dev->name, err);
+        return err;
     }
 
     sys_slist_init(&data->callbacks);
@@ -441,7 +532,12 @@ static int sc16is7xx_gpio_init(const struct device* dev)
     data->device_info = sc16is7xx_get_device_info(parent_dev);
     if (!data->device_info) {
         err = -EINVAL;
-        LOG_ERR("Device '%s': Could not get device info from parent MFD! Error code = %d", dev->name, err);
+        LOG_ERR(
+            "Device '%s': Could not get device info from parent MFD! Error code = %d, parent = %s",
+            dev->name,
+            err,
+            parent_dev->name
+        );
         return err;
     }
 
@@ -460,7 +556,14 @@ static int sc16is7xx_gpio_init(const struct device* dev)
     reg_addr = SC16IS7XX_REG_IOCONTROL(0, SC16IS7XX_REGRW_READ);
     err = sc16is7xx_bus_read_byte(bus_lock.bus, reg_addr, &reg_value);
     if (err) {
-        LOG_ERR("Device '%s': Could not read device's IOCONTROL register!", dev->name);
+        LOG_ERR(
+            "Device '%s': Could not read device's IOCONTROL register! Error code = %d, parent-state = %d, "
+            "parent-status-code = %d",
+            dev->name,
+            err,
+            parent_dev->state->initialized,
+            parent_dev->state->init_res
+        );
         err = -EIO;
         goto end;
     }
@@ -473,10 +576,31 @@ static int sc16is7xx_gpio_init(const struct device* dev)
     reg_addr = SC16IS7XX_REG_IOCONTROL(0, SC16IS7XX_REGRW_WRITE);
     err = sc16is7xx_bus_write_byte(bus_lock.bus, reg_addr, reg_value);
     if (err) {
-        LOG_ERR("Device '%s': Could not write device's IOCONTROL register!", dev->name);
+        LOG_ERR("Device '%s': Could not read device's IOCONTROL register! Error code = %d", dev->name, err);
         err = -EIO;
         goto end;
     }
+
+    reg_addr = SC16IS7XX_REG_IODIR(0, SC16IS7XX_REGRW_READ);
+    err = sc16is7xx_bus_read_byte(bus_lock.bus, reg_addr, &reg_value);
+    if (err) {
+        LOG_ERR("Device '%s': Could not read device's IODIR register! Error code = %d", dev->name, err);
+        err = -EIO;
+        goto end;
+    }
+
+    bus_lock.bus->regs.iodir = reg_value;
+
+    reg_addr = SC16IS7XX_REG_IOSTATE(0, SC16IS7XX_REGRW_READ);
+    err = sc16is7xx_bus_read_byte(bus_lock.bus, reg_addr, &reg_value);
+    if (err) {
+        err = -EIO;
+        goto end;
+    }
+
+    bus_lock.bus->regs.iostate = reg_value;
+
+    sc16is7xx_bridge_log_registers_UNSAFE_(dev, bus_lock.bus);
 
 end:
     if (sc16is7xx_unlock_bus(config->parent_dev, &bus_lock)) {
@@ -484,7 +608,6 @@ end:
     }
 
     return err;
-    return 0;
 }
 
 static const struct gpio_driver_api sc16is7xx_gpio_driver_api = {
@@ -499,8 +622,7 @@ static const struct gpio_driver_api sc16is7xx_gpio_driver_api = {
 };
 
 #define SC16IS7XX_CONFIG_COMMON_PROPS(inst, pn_suffix) \
-    .common = { .port_pin_mask = \
-                    (GPIO_PORT_PIN_MASK_FROM_NGPIOS(DT_INST_PROP(inst, ngpios))) }, \
+    .common = { .port_pin_mask = (GPIO_PORT_PIN_MASK_FROM_NGPIOS(DT_INST_PROP(inst, ngpios))) }, \
     .parent_dev = DEVICE_DT_GET(DT_INST_PARENT(inst)), .ngpios = DT_INST_PROP(inst, ngpios)
 
 #define SC16IS7XX_DEFINE(inst, pn_suffix) \

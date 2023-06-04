@@ -39,6 +39,12 @@ typedef uint8_t sc16is7xx_regaddr_t;
     (SPI_WORD_SET(8) | SPI_TRANSFER_MSB | SPI_MODE_CPOL | SPI_MODE_CPHA | SPI_OP_MODE_MASTER)
 #endif
 
+struct sc16is7xx_bus_regs
+{
+    uint8_t iodir; /* 0 for input, 1 for output */
+    uint8_t iostate;
+};
+
 union sc16is7xx_bus_dev
 {
 #ifdef CONFIG_SPI
@@ -72,8 +78,11 @@ struct sc16is7xx_bus_api
 
 struct sc16is7xx_bus
 {
-    const struct sc16is7xx_bus_api* api;
-    union sc16is7xx_bus_dev dev;
+    const struct sc16is7xx_bus_api* const api;
+    union sc16is7xx_bus_dev const dev;
+    struct sc16is7xx_bus_regs regs;
+    struct sc16is7xx_bus_regs prev_regs;
+    struct sc16is7xx_bus_regs curr_regs;
 };
 
 
