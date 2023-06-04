@@ -7,13 +7,16 @@
 #include <stdio.h>
 
 #include <zephyr/device.h>
+#include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/sensor.h>
+#include <zephyr/drivers/i2c.h>
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/sensor/ens160.h>
 
 /* 1000 msec = 1 sec */
-#define SLEEP_TIME_MS 5000
+#define CYCLE_TIME_MS 1000
+#define POLL_CYCLES_COUNT 5
 #define LED0_NODE DT_ALIAS(uart_bridge_led0)
 // #define LED0_NODE DT_ALIAS(led0)
 
@@ -25,8 +28,10 @@
 
 // const struct device* const dev_th = DEVICE_DT_GET_ONE(DT_ALIAS(sensor_th));
 static bool th_ready;
+static bool gpio_ready;
 static struct sensor_value curr_temp = {0}, curr_hum = {0};
 
+static void i2c_scan();
 static void measure_th_(const struct device* const dev);
 static void measure_thp_(const struct device* const dev);
 static void measure_voc_eco2_(const struct device* const dev);
@@ -34,8 +39,12 @@ static void measure_voc_eco2_(const struct device* const dev);
 int main(void)
 {
     int ret;
+    int cycle = 0;
+    gpio_ready = false;
 
     printk("initializing...\n");
+
+    // i2c_scan();
 
     const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
     const struct device* const dev_voc_eco2 = DEVICE_DT_GET_ONE(sciosense_ens160);
@@ -43,7 +52,7 @@ int main(void)
     const struct device* const dev_thp = DEVICE_DT_GET_ONE(bosch_bme680);
     int rc;
 
-    k_msleep(SLEEP_TIME_MS);
+    k_msleep(CYCLE_TIME_MS * POLL_CYCLES_COUNT);
 
     printf("Is device %s ready?\n", dev_th->name);
     if (!device_is_ready(dev_th)) {
@@ -66,35 +75,89 @@ int main(void)
     printk("Is GPIO device <%s %d> ready?\n", led.port->name, led.pin);
 	if (!gpio_is_ready_dt(&led)) {
         printk("failed to initialize led device!\n");
-		return 0;
-	}
+	} else {
+        printk("Configuring GPIO device <%s %d>...\n", led.port->name, led.pin);
+        ret = gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
+        if (ret < 0) {
+            printk("failed to configure led pin!\n");
+        } else {
+            gpio_ready = true;
+        }
+    }
 
-    printk("Configuring GPIO device <%s %d>...\n", led.port->name, led.pin);
-	ret = gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
-	if (ret < 0) {
-        printk("failed to configure led pin!\n");
-		return 0;
-	}
-
-    k_msleep(SLEEP_TIME_MS);
+    k_msleep(CYCLE_TIME_MS * POLL_CYCLES_COUNT);
 
     while (true) {
-        th_ready = false;
-        measure_th_(dev_th);
-        measure_thp_(dev_thp);
-        measure_voc_eco2_(dev_voc_eco2);
+        if (cycle % POLL_CYCLES_COUNT == 0) {
+            printk("\n");
+            th_ready = false;
+            measure_th_(dev_th);
+            measure_thp_(dev_thp);
+            measure_voc_eco2_(dev_voc_eco2);
+            printk("\n");
+        }
 
-		ret = gpio_pin_toggle_dt(&led);
-		if (ret < 0) {
-            printk("failed to toggle led!\n");
-			return 0;
-		}
+        cycle++;
 
-        k_msleep(SLEEP_TIME_MS);
-        printk("sleeping...\n");
+        if (gpio_ready) {
+            ret = gpio_pin_toggle_dt(&led);
+            if (ret) {
+                printk("failed to toggle led! Error code = %d\n", ret);
+                return 0;
+            }
+        }
+
+        printk(" * ");
+        k_msleep(CYCLE_TIME_MS);
     }
 
     return 0;
+}
+
+#define I2C_NODE DT_ALIAS(i2c0)
+#define I2C_DEV	DT_LABEL(I2C_NODE)
+
+void i2c_scan() {
+    const struct device *i2c_dev = DEVICE_DT_GET(DT_ALIAS(i2c0));
+
+    if (!device_is_ready(i2c_dev)) {
+		printk("I2C: Device driver not found.\n");
+		return;
+	}
+
+	printk("\n    | 0x00 0x01 0x02 0x03 0x04 0x05 0x06 0x07 0x08 0x09 0x0a 0x0b 0x0c 0x0d 0x0e 0x0f |\n");
+	printk(  "----|---------------------------------------------------------------------------------");
+
+	uint8_t error = 0u;
+	uint8_t dst;
+	uint8_t i2c_dev_cnt = 0;
+	struct i2c_msg msgs[1];
+	msgs[0].buf = &dst;
+	msgs[0].len = 1U;
+	msgs[0].flags = I2C_MSG_WRITE | I2C_MSG_STOP;
+
+	for (uint16_t x = 0; x <= 0x7f; x++) {
+		if (x % 0x10 == 0) {
+			printk("|\n0x%02x| ",x);
+		}
+
+		if (x >= 1 && x <= 0x7f) {
+			error = i2c_transfer(i2c_dev, &msgs[0], 1, x);
+            if (error == 0) {
+                printk("0x%02x ",x);
+                i2c_dev_cnt++;
+            } else {
+                printk(" --  ");
+            }
+		} else {
+			printk("     ");
+		}
+
+        k_msleep(50);
+	}
+    printk("|\n");
+	printk("\nI2C device(s) found on the bus: %d\nScanning done.\n\n", i2c_dev_cnt);
+	printk("Find the registered I2C address on: https://i2cdevices.org/addresses\n\n");
 }
 
 void measure_th_(const struct device* const dev)

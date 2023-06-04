@@ -4,6 +4,7 @@
     sensor-thp = &bme680;
     sensor-tvoc = &ens160;
     uart-bridge = &sc16is762;
+    i2c0 = &wemos_c3_mini_i2c;
     uart-bridge-led0 = &uart_bridge_led0;
   };
 
@@ -37,16 +38,16 @@
 		reg = <0x53>;
 	};
 
-  sc16is762: sc16is762@90 {
+  sc16is762: sc16is762@4d {
     compatible = "nxp,sc16is762-i2c";
-    reg = < 0x90 >;
-    // xtal-freq = < 1843200 >;
+    reg = < 0x4d >;
+    xtal-freq = < 1843200 >;
 
-    sc16is762_uart0: sc16is762-uart {
-      compatible = "nxp,sc16is762-uart-controller";
-      uart-controller;
-      channel = < 0 >;
-    };
+    // sc16is762_uart0: sc16is762-uart {
+    //   compatible = "nxp,sc16is762-uart-controller";
+    //   uart-controller;
+    //   channel = < 0 >;
+    // };
 
     sc16is762_gpio1: sc16is762-gpio {
       compatible = "nxp,sc16is762-gpio-controller";
