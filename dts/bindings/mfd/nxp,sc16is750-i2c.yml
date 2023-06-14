@@ -2,9 +2,7 @@
 
 include: ["nxp,sc16is7xx.yml", sensor-device.yaml, i2c-device.yaml]
 
-description: NXP SC16IS750 I2C to UART bridge (I2C tnterface).
-
-compatible: "nxp,sc16is750-i2c"
+compatible: "nxp,sc16is750"
 bus: nxp,sc16is750
 on-bus: i2c
 

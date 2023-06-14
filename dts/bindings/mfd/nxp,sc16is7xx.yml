@@ -10,13 +10,14 @@ description: |
 
   Functionality depends on the device model:
 
-  - The SC16IS7X0 series is a single-UART bridge.
-  - The SC16IS7X2 series is a dual-UART bridge.
+  - The SC16IS7X0 series are single-UART bridge devices.
+  - The SC16IS7X2 series are dual-UART bridge devices.
 
   In both cases, depending on the device's configuration, up to two GPIO
   controllers can be used, from which 4 GPIO pins can be accessed from each.
   Those controllers may be associated with an UART channel, in which case the
-  user can either use the controller as GPIO or as Modem Flow Control pins.
+  user can either use the controller as GPIO or as Modem Flow Control pins
+  (DTR, DSR, CD and RI).
 
   An example I2C configuration:
 
@@ -30,6 +31,7 @@ description: |
         sc16is7xx_uart0: sc16is7xx_uart_controller {
           compatible = "nxp,sc16is7xx-uart-controller";
           status = "okay";
+          uart-controller;
           hw-flow-control;
           modem-flow-control;
           channel = < 0 >;

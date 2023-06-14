@@ -34,4 +34,54 @@ config UART_SC16IS7XX_INIT_PRIORITY
     also be taken as a priority if GPIO ports collide with modem flow
     control ports.
 
+config CONFIG_UART_SC16IS7XX_LINE_CTRL
+  bool "SC16IS7XX UART controller interrupt controls"
+  default y
+  depends on CONFIG_UART_LINE_CTRL
+
+config CONFIG_UART_SC16IS7XX_USE_RUNTIME_CONFIGURE
+  bool "SC16IS7XX UART controller runtime configuration"
+  default y
+  depends on CONFIG_UART_USE_RUNTIME_CONFIGURE
+
+config UART_SC16IS7XX_INTERRUPT_DRIVEN
+  bool "SC16IS7XX UART controller interrupt controls"
+  default y
+  depends on MFD_SC16IS7XX_INTERRUPT && UART_INTERRUPT_DRIVEN
+  help
+    Activates UART interrupt-driven controls.
+
+    Although the device itself won't manage interrupts directly (as it is
+    shared amongst bridges, which necessitates centralized control through
+    a corresponding MFD driver), activating UART_INTERRUPT_DRIVEN is
+    still necessary, in order to keep consistency with other device drivers
+    of the same nature.
+
+    Likewise, interrupts on the MFD must also be enabled, via
+    MFD_SC16IS7XX_INTERRUPT. Although this flag is automatically selected,
+    your device declaration in the devicetree must also be configured with
+    at least one means of hardware interrupts (e.g. GPIO interrupts) in
+    order for interrupt-driven controls to be enabled in the children/bridges.
+
+config UART_SC16IS7XX_ASYNC_API
+  bool "SC16IS7XX UART controller asynchronous communication"
+  default y
+  depends on UART_ASYNC_API
+  help
+    Activates UART asyncrhonous controls.
+
+config MFD_SC16IS7XX_ASYNC_THREAD_PRIORITY
+	int "Async API's Thread priority"
+	depends on UART_SC16IS7XX_ASYNC_API
+	default 5
+	help
+	  Priority of thread used by the driver to handle the Async API operations.
+
+config MFD_SC16IS7XX_ASYNC_THREAD_STACK_SIZE
+	int "Async API's Thread stack size"
+	depends on UART_SC16IS7XX_ASYNC_API
+	default 1024
+	help
+	  Stack size of thread used by the driver to handle the Async API operations.
+
 endif

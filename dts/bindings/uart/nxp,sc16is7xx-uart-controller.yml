@@ -18,16 +18,15 @@ properties:
       The number of available UART channels changes according to the part number of
       the IC, but in general, up to 2 UART channels are available.
 
-  xtal-prescaler:
+  baud-clock-prescaler:
     type: int
-    default: 0
     description: |
-      Sets a specific UART baud rate prescaler value.
+      Fixes a specific baud clock prescaler value.
 
-      This will prevent the driver from any attempts to optimizing the baud rate
-      calculation (ie. effective baud rate with the smallest possible error/deviation).
+      If omitted, a prescaler value will be automatically selected by the device driver
+      when setting the UART channel's baud rate; said value will be the one that presents
+      the least difference between the desired and actual baud rate.
     enum:
-      - 0
       - 1
       - 4
 
@@ -35,40 +34,85 @@ properties:
     type: int
     default: 9600
     description: |
-      Initial baud rate setting for UART
+      Initial baud rate setting for the UART communication.
+
+      Note that the actual communication speed may not exactly match the one configured.
+      In some cases, the driver will try to calculate the nearest approximation of the
+      speed value, and use that value instead. This actual baud rate speed calculation is
+      done based on `xtal-freq` (on parent DTS node) and `baud-clock-prescaler`. Please
+      see the datasheet for more details.
 
   operation-mode:
     type: string
     default: rs232
     description: |
-      Enables 9-bit (Multidrop) mode (RS-485).
-    enum:
-      - rs485
-      - rs232
+      Specifies how the device will operate.
 
-  invert-rts-value:
+      Allowed values:
+
+      - "rs232": Normal mode.
+      - "rs485": Multidrop, or 9-bit (RS-485) mode.
+
+      In "rs485" mode, some configurations will be fixed, and therefore won't be
+      considered:
+
+      - `parity` is ignored, as that bit indicates when a device address is being sent.
+      - `stop-bits` is ignored.
+      - `data-bits = < 8 >`.
+    enum:
+      - rs232
+      - rs485
+
+  rs485-invert-rts:
     type: boolean
     description: |
-      Inverts the meaning of the RTS flag. Applicable only when `operation-mode = "rs485"`.
+      Inverts the meaning of the RTS flag when `operation-mode = "rs485"`.
+
+  device-address:
+    type: int
+    description: |
+      Sets the address to compare when `operation-mode = "rs485"`.
+
+      This configuration enables automatic detection of the address of the device to which
+      transmission is intended to. When the address being transmitted DOES NOT equals this
+      configured address, the data being transmitted is just ignored. Otherwise, data will
+      pass along to the RX buffer, etc.
+
+      Note that this property, when set, will overlap (and therefore disable) two other
+      configurations:
+
+      - `detect-special-character` will be force-enabled; and
+      - XOFF[2] (`xoff`, byte 2) will be used to store the device's address.
+
+      But when this property is NOT informed, auto address detection mode will be disabled,
+      and the device will operate in normal multidrop mode. In this mode, the user is
+      responsible for enabling or disabling transmission/reception of data depending on
+      the received address (ie. parity bit interrupt). Resuming or halting communication
+      afterwards must also be explicitly performed, through Zephyr's Interrupt-based UART API.
+      This mode of operation may be useful for devices with multiple addresses.
 
   hw-flow-control:
     type: boolean
     description: |
-      Set to enable RTS/CTS flow control at boot time.
+      Set to enable RTS and CTS flow control through specific hardware lines.
+
+      If not enabled, software flow control is assumed.
+
+      See property `hw-flow-mode` for more details on how to set uṕ hardware flow control.
 
   modem-flow-control:
     type: boolean
     description: |
-      Enables modem flow control flags for this UART channel.
+      Enables hardware-level modem flow control flags for this UART channel.
 
       This will bind 4 GPIO pins to the UART channel:
 
-      - DSR ("Data Set Ready," active LOW);
-      - DTR ("Data Terminal Ready," active LOW);
-      - CD ("Carrier Detect," active LOW);
-      - RI ("Ring Indicator," active LOW);
+      - DSR ("Data Set Ready," active LOW on hardware);
+      - DTR ("Data Terminal Ready," active LOW on hardware);
+      - CD (or DCD; "Carrier Detect," active LOW on hardware);
+      - RI ("Ring Indicator," active LOW on hardware);
 
-      Beware that, depending on the device's part-number, modem-flow-control
+      Beware that, depending on the device's part-number, `modem-flow-control`
       may affect GPIO controller availability:
 
       - For SC16IS750 and SC16IS760, GPIO0 is always available, but
@@ -78,38 +122,185 @@ properties:
         corresponding GPIO unavailable.
       - SC16IS740 is unaffected, as it has neither GPIO nor Modem Flow support.
 
+      Control of those Modem Flow GPIO lines is mostly manual, but some degree of
+      automation can be achieved through `hw-flow-mode`.
+
   hw-flow-mode:
     type: string
-    default: "device"
+    default: auto
     description: |
-      Indicates how to manage hardware flow control (CTS and RTS flags).
+      Specifies how hardware flow will be driven.
 
-      - "device": The device itself will control signaling;
-      - "driver": The device's driver will control signaling;
-      - "user": The user will control signaling (e.g. via custom device functions).
+      - "user": The user will control the hardware flow control GPIO lines explicitly.
+      - "auto": Hardware flow control GPIO lines will be driven either by the driver or
+        by the device itself.
+
+      Automatic hardware flow control means direct control of RTS and CTS lines.
+
+      If in automatic mode, and `modem-flow-control` is enabled, `DTR` will be set once
+      the device is initialized, and control afterwards will be passed to the user. This
+      is due to the IC series not having any means of automatically signaling DTR.
+
+      Note that some features will be automatically enabled when depending on automatic
+      hardware flow control:
+
+      - FIFO will be auto-enabled, and `rx-flow-halt-trigger` and `rx-resume-halt-trigger`
+        will be configured. Those are necessary in hardware to determine when to set/clear
+        the line control flags.
+
+      Also, when `operation-mode = "rs485"`, this configuration is reflected as a different
+      level of hardware flow control. More especifically, CTS may not be automatically
+      driven by the hardware, as the operation logic is slightly different when RS485
+      addressing is enabled. See the datasheet, section "Auto RS-485 RTS control", for more
+      details.
     enum:
-      - device
-      - driver
       - user
+      - auto
 
-  modem-flow-mode:
+  sw-flow-mode:
     type: string
-    default: "device"
+    default: "user"
     description: |
-      Indicates how to manage modem flow control (DSR, DTR, CD and RI flags).
+      Indicates how to manage software flow control (receive and transmit XON/XOFF, etc).
 
-      - "device": The device itself will control signaling;
-      - "driver": The device's driver will control signaling;
-      - "user": The user will control signaling (e.g. via custom device functions).
+      This configuration is only available when `hw-flow-control` is disabled.
+
+      See section "Software flow control" in the datasheet for more details.
+
+      "user" indicates that the user will control signaling explicitly. Otherwise,
+      hardware-driven software flow is a combination of how transmit and receive
+      will deal with XON and XOFF:
+
+      For transmit ("tx"):
+
+      - A "0" suffix means no transmit flow control will occur.
+      - A "1" suffix means that a XON[1] will be sent to signal the end of a transmission.
+        Likewise, a "2" suffix means a XON[2] will be sent.
+      - A "1and2" suffix means that both XON[1] and XON[2] will be sent at the end of a
+        transmission.
+
+      For receive ("rx"):
+
+      - A "0" suffix means no receive flow control will occur.
+      - A "1" suffix means that only XON[1] will be compared with each received byte to detect
+        the end of a transmission. Likewise, a "2" suffix means only XON[2] will be compared.
+      - A "1and2" suffix means that both XON[1] and XON[2] must occur to detect end of
+        transmission, and they must appear in that order.
+      - A "1or2" suffix means that either XON[1] or XON[2] must occur.
+
+      `xon` and `xoff` must also be properly configured, depending on the `sw-flow-mode`
+      selected.
     enum:
-      - device
-      - driver
       - user
+      - tx0-rx2
+      - tx0-rx1
+      - tx0-rx1and2
+      - tx1-rx0
+      - tx1-rx2
+      - tx1-rx1
+      - tx1-rx1or2
+      - tx2-rx0
+      - tx2-rx2
+      - tx2-rx1
+      - tx2-rx1or2
+      - tx1and2-rx0
+      - tx1and2-rx2
+      - tx1and2-rx1
+      - tx1and2-rx1and2
+
+  xon:
+    type: uint8-array
+    description: |
+      Configures which characters to identify as the "start" of a transmission.
+
+      XON may also be used in some other contexts (e.g. special character detection).
+
+      Up to 2 (two) 8-bit characters can be informed. If `data-bits` is less than 8,
+      only the lowest bits will be considered.
+
+      XON[1] (or XON1) refers to the first byte, whereas XON[2] (or XON2) refers to
+      the second.
+
+  xoff:
+    type: uint8-array
+    description: |
+      Configures which characters to identify as the "end" of a transmission.
+
+      XOFF may also be used in some other contexts (e.g. special character detection).
+
+      Up to 2 (two) 8-bit characters can be informed. If `data-bits` is less than 8,
+      only the lowest bits will be considered.
+
+      XOFF[1] (or XOFF1) refers to the first byte, whereas XOFF[2] (or XOFF2) refers to
+      the second.
+
+  hw-transmit-loopback:
+    type: boolean
+    description: |
+      Enables transmission loopback to RX lines, at a hardware level.
+
+      This feeds TX into RX, RTS into CTS, and (possibly) DTR into DSR.
+
+  irda-transceiver:
+    type: boolean
+    description: |
+      Enables IrDA transceiver mode.
+
+      This configuration changes how TX and RX are driven by the IC, to enable communication
+      with IrDA transceivers. In IrDA mode, bit pulses have 3/16 of their normal duration, when
+      compared to normal operation.
+
+      To ensure maximum compatibility, it's advised to configure your UART device to have one
+      of the following standardized baud rates (IrDA SIR):
+
+      - 9.6 Kbit/s
+      - 19.2 Kbit/s
+      - 38.4 Kbit/s
+      - 57.6 Kbit/s
+      - 115.2 Kbit/s
+
+      However, the standard also allows the following fast speed rates (IrDA MIR):
+
+      - 576 Kbit/s
+      - 1.152 Mbit/s
+
+      For those faster speeds (MIR), you should also enable `allow-irda-fast-speed`, but be aware
+      that the the SC16IS7XX series of ICs implement a proprietary communication protocol loosely
+      based on the standard, and therefore are NOT compatible with any other IR device that's NOT
+      from Philips/NXP.
+
+      `allow-irda-fast-speed` is only supported for the SC16IS76X series (ie. SC16IS760 and
+      SC16IS762).
+
+      For more information on IrDA Mode, check the datasheet, or NXP/Philips' Application
+      Note AN10417.
+
+  detect-special-character:
+    type: boolean
+    description: |
+      Enables parity interrupt upon receiving a XOFF[2] character, without halting
+      transmission.
+
+      This is only valid when running in RS232 mode. In RS485 mode, special character
+      detection is effectively configured through `device-address`, either by definition
+      (enabled) or omission (disabled, ie. no detection).
+
+  enable-xon-any:
+    type: boolean
+    description: |
+      Enables auto-resume of communication upon receiving any character after detection
+      of a XOFF character.
+
+      Which characters are XOFF characters is configured by the `xoff` property. Also note
+      that a XON[1] character may be detected as a XON ANY character, which could cause a
+      XON[2] to be written to the RX FIFO.
+
+      Please see the datasheet, section "Software flow control", for more details.
 
   enable-sleep-mode:
     type: boolean
     description: |
-      Enables sleep mode for this UART channel.
+      Enables sleep mode for this UART channel upon device driver startup.
 
       Sleep mode is activated when:
 
@@ -129,10 +320,12 @@ properties:
 
       If enabled, sleep mode will greatly decrease power consumption.
 
+      Please see Application Note AN10571 for more details.
+
   disable-tx:
     type: boolean
     description: |
-      Disables transmission.
+      Disables transmission at startup.
 
       This flags allow the UART channel to start with data transmission entirely
       disabled. The host can write to the UART, but no data will be sent
@@ -143,7 +336,7 @@ properties:
   disable-rx:
     type: boolean
     description: |
-      Disables transmission.
+      Disables transmission at startup.
 
       This flags allow the UART channel to start with data reception entirely
       disabled. Even if the upstream UART-connected device sends data, it will be
@@ -167,25 +360,43 @@ properties:
 
   tx-fifo-trigger:
     type: int
-    default: 16
+    default: 48
     description: |
-      Sets the trigger level for the TX FIFO.
-    enum:
-      - 8
-      - 16
-      - 32
-      - 56
+      Sets the interrupt trigger level for the TX FIFO fill.
+
+      Trigger levels are set in increments of 4, starting at 4. If a non-multiple of
+      4 is used, the driver will fail at initialization.
 
   rx-fifo-trigger:
     type: int
-    default: 8
+    default: 32
     description: |
-      Sets the trigger level for the RX FIFO.
-    enum:
-      - 8
-      - 16
-      - 56
-      - 60
+      Sets the interrupt trigger level for the RX FIFO fill.
+
+      Trigger levels are set in increments of 4, starting at 4. If a non-multiple of
+      4 is used, the driver will fail at initialization.
+
+  rx-flow-halt-trigger:
+    type: int
+    default: 4
+    description: |
+      Sets the flow control trigger levels to stop transmission, for the RX FIFO.
+
+      Only relevant when FIFO is enabled, AND flow is controlled by the device itself.
+
+      Trigger levels are set in increments of 4, starting at 4. If a non-multiple of
+      4 is used, the driver will fail at initialization.
+
+  rx-flow-resume-trigger:
+    type: int
+    default: 0
+    description: |
+      Sets the flow control trigger levels to resume transmission, for the RX FIFO.
+
+      Only relevant when FIFO is enabled, AND flow is controlled by the device itself.
+
+      Trigger levels are set in increments of 4, starting at 4. If a non-multiple of
+      4 is used, the driver will fail at initialization.
 
   parity:
     type: string

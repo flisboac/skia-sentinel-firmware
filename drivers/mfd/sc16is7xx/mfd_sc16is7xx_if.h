@@ -39,10 +39,17 @@ typedef uint8_t sc16is7xx_regaddr_t;
     (SPI_WORD_SET(8) | SPI_TRANSFER_MSB | SPI_MODE_CPOL | SPI_MODE_CPHA | SPI_OP_MODE_MASTER)
 #endif
 
-struct sc16is7xx_bus_regs
+struct sc16is7xx_bus_gpio_regvalues
 {
     uint8_t iodir; /* 0 for input, 1 for output */
     uint8_t iostate;
+};
+
+struct sc16is7xx_bus_gpio_regs
+{
+    struct sc16is7xx_bus_gpio_regvalues current;
+    struct sc16is7xx_bus_gpio_regvalues int_prev;
+    struct sc16is7xx_bus_gpio_regvalues int_curr;
 };
 
 union sc16is7xx_bus_dev
@@ -80,9 +87,7 @@ struct sc16is7xx_bus
 {
     const struct sc16is7xx_bus_api* const api;
     union sc16is7xx_bus_dev const dev;
-    struct sc16is7xx_bus_regs regs;
-    struct sc16is7xx_bus_regs prev_regs;
-    struct sc16is7xx_bus_regs curr_regs;
+    struct sc16is7xx_bus_gpio_regs* gpio_regs;
 };
 
 

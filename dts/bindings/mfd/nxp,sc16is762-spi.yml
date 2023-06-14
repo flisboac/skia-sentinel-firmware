@@ -2,9 +2,7 @@
 
 include: ["nxp,sc16is7xx.yml", sensor-device.yaml, spi-device.yaml]
 
-description: NXP SC16IS762 SPI to UART bridge (SPI tnterface).
-
-compatible: "nxp,sc16is762-spi"
+compatible: "nxp,sc16is762"
 bus: nxp,sc16is762
 on-bus: spi
 

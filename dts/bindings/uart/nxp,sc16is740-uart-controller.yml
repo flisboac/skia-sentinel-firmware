@@ -11,3 +11,8 @@ properties:
   channel:
     enum:
       - 0
+
+  supports-irda-fast-speed:
+    type: boolean
+    const: false
+    default: false

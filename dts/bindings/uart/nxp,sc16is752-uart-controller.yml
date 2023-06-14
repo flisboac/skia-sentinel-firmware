@@ -12,3 +12,8 @@ properties:
     enum:
       - 0
       - 1
+
+  supports-irda-fast-speed:
+    type: boolean
+    const: false
+    default: false

@@ -1,7 +1,3 @@
-// REMOVE-ME
-#define MFD_SC16IS7XX_INTERRUPT
-#define MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
-
 #define SC16IS7XX_IAPI
 #include "mfd_sc16is7xx.h"
 
@@ -15,13 +11,13 @@
     #include <zephyr/pm/device.h>
 #endif
 
-#ifdef MFD_SC16IS7XX_INTERRUPT
+#ifdef CONFIG_MFD_SC16IS7XX_INTERRUPT
     #define MFD_SC16IS7XX_INTERRUPT_ENABLED 1
 #else
     #define MFD_SC16IS7XX_INTERRUPT_ENABLED 0
 #endif
 
-#ifdef MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
+#ifdef CONFIG_MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
     #define MFD_SC16IS7XX_INTERRUPT_OWN_THREAD_ENABLED 1
 #else
     #define MFD_SC16IS7XX_INTERRUPT_OWN_THREAD_ENABLED 0
@@ -59,13 +55,13 @@ struct sc16is7xx_device_config
 {
     size_t bridges_cap;
     struct sc16is7xx_device_info* device_info;
-#ifdef MFD_SC16IS7XX_INTERRUPT
+#ifdef CONFIG_MFD_SC16IS7XX_INTERRUPT
     struct sc16is7xx_interrupt_config interrupt;
-    #ifdef MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
+    #ifdef CONFIG_MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
     size_t interrupt_queue_stack_len;
     void* interrupt_queue_stack_area;
-    #endif /* MFD_SC16IS7XX_INTERRUPT_OWN_THREAD */
-#endif /* MFD_SC16IS7XX_INTERRUPT */
+    #endif /*CONFIG_SC16IS7XX_INTERRUPT_OWN_THREAD */
+#endif /* CONFIG_MFD_SC16IS7XX_INTERRUPT */
     const struct sc16is7xx_bridge_dt_info* bridges_dt_info;
     struct sc16is7xx_bridge_registration* bridges_ptr;
 };
@@ -76,15 +72,16 @@ struct sc16is7xx_device_data
     size_t bridges_len;
     struct k_mutex bus_lock;
     struct sc16is7xx_bus bus;
-#ifdef MFD_SC16IS7XX_INTERRUPT
-    struct k_spinlock interrupt_lock;
-    struct k_work interrupt_work;
-    #ifdef MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
-    struct k_work_q interrupt_queue;
-    #endif /* MFD_SC16IS7XX_INTERRUPT_OWN_THREAD */
-    struct gpio_callback gpio_interrupt_callback;
+    struct sc16is7xx_bus_gpio_regs bus_gpio_regs;
     const struct device* own_instance;
-#endif /* MFD_SC16IS7XX_INTERRUPT */
+#ifdef CONFIG_MFD_SC16IS7XX_INTERRUPT
+    atomic_t in_interrupt_handler;
+    struct k_work interrupt_work;
+    #ifdef CONFIG_MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
+    struct k_work_q interrupt_queue;
+    #endif /* CONFIG_MFD_SC16IS7XX_INTERRUPT_OWN_THREAD */
+    struct gpio_callback gpio_interrupt_callback;
+#endif /* CONFIG_MFD_SC16IS7XX_INTERRUPT */
 };
 
 static int sc16is7xx_mfd_init_bridges_UNSAFE_(const struct device* mfd_dev);
@@ -115,12 +112,7 @@ int sc16is7xx_register_bridge(  //
     struct sc16is7xx_bridge_registration* sub;
     int err = 0;
 
-    lock_handle = k_spin_lock(&data->interrupt_lock);
-
-    if (data->bridges_len >= config->bridges_cap) {
-        err = -ENOMEM;
-        goto end;
-    }
+    if (data->bridges_len >= config->bridges_cap) { return -ENOMEM; }
 
     for (i = 0; i < data->bridges_len; i++) {
         sub = config->bridges_ptr + data->bridges_len;
@@ -133,8 +125,7 @@ int sc16is7xx_register_bridge(  //
                 bridge_info->kind,
                 bridge_info->channel_id
             );
-            err = -EINVAL;
-            goto end;
+            return -EINVAL;
         }
     }
 
@@ -150,14 +141,10 @@ int sc16is7xx_register_bridge(  //
             data->bridges_len,
             config->bridges_cap - data->bridges_len
         );
-        goto end;
+        return 0;
     }
 
-    err = sc16is7xx_mfd_init_bridges_UNSAFE_(mfd_dev);
-
-end:
-    k_spin_unlock(&data->interrupt_lock, lock_handle);
-    return err;
+    return sc16is7xx_mfd_init_bridges_UNSAFE_(mfd_dev);
 }
 
 int sc16is7xx_enqueue_interrupt_work(  //
@@ -169,11 +156,11 @@ int sc16is7xx_enqueue_interrupt_work(  //
 
     if (!mfd_dev || !work) { return -EINVAL; }
 
-#ifndef MFD_SC16IS7XX_INTERRUPT
+#ifndef CONFIG_MFD_SC16IS7XX_INTERRUPT
     return -ENOTSUP;
 #endif
 
-#ifdef MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
+#ifdef CONFIG_MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
     data = mfd_dev->data;
     return k_work_submit_to_queue(&data->interrupt_queue, work);
 #else
@@ -198,6 +185,8 @@ int sc16is7xx_lock_bus(  //
     if (err) { return err; }
 
     lock->bus = &data->bus;
+    lock->locked = true;
+
     return 0;
 }
 
@@ -212,7 +201,13 @@ int sc16is7xx_unlock_bus(  //
 
     struct sc16is7xx_device_data* data = mfd_dev->data;
 
-    return k_mutex_unlock(&data->bus_lock);
+    if (!lock->locked) { return 0; }
+
+    err = k_mutex_unlock(&data->bus_lock);
+    lock->bus = NULL;
+    lock->locked = false;
+
+    return err;
 }
 
 static inline void sc16is7xx_mfd_command_wait(const struct device* dev)
@@ -234,7 +229,7 @@ static int sc16is7xx_mfd_init_bridges_UNSAFE_(const struct device* mfd_dev)
     return 0;
 }
 
-#ifdef MFD_SC16IS7XX_INTERRUPT
+#ifdef CONFIG_MFD_SC16IS7XX_INTERRUPT
 static void sc16is7xx_mfd_handle_interrupt(struct k_work* work_item)
 {
     size_t i;
@@ -250,11 +245,14 @@ static void sc16is7xx_mfd_handle_interrupt(struct k_work* work_item)
     struct sc16is7xx_interrupt_info interrupt_info;
     k_spinlock_key_t lock_handle;
     int err = 0;
-    bool has_interrupts, ready;
+    bool has_interrupts, ready, in_interrupt_handler;
 
-    ready = atomic_get(&data->ready);
+    if (!atomic_get(&data->ready)) { return; }
 
-    if (!data->ready) { return; }
+    SC16IS7XX_BUS_LOCK_INIT(bus_lock);
+
+    in_interrupt_handler = atomic_cas(&data->in_interrupt_handler, false, true);
+    if (!in_interrupt_handler) { return; }
 
     for (channel_id = 0; !err && channel_id < config->device_info->total_uart_channels; channel_id++) {
         has_interrupts = true;
@@ -263,7 +261,7 @@ static void sc16is7xx_mfd_handle_interrupt(struct k_work* work_item)
             err = sc16is7xx_lock_bus(dev, &bus_lock, K_FOREVER);
             if (err) {
                 LOG_DBG("Device '%s': Could not lock device bus access! Error code = %d", dev->name, err);
-                return;
+                break;
             }
 
             reg_addr = SC16IS7XX_REG_IIR(channel_id, SC16IS7XX_REGRW_READ);
@@ -276,6 +274,7 @@ static void sc16is7xx_mfd_handle_interrupt(struct k_work* work_item)
             err = sc16is7xx_unlock_bus(dev, &bus_lock);
             if (err) {
                 LOG_DBG("Device '%s': Could not unlock device bus access! Error code = %d", dev->name, err);
+                err = 0;
             }
 
             has_interrupts = SC16IS7XX_BITCHECK(reg_value, SC16IS7XX_REGFLD_IIR_STATUS);
@@ -289,6 +288,8 @@ static void sc16is7xx_mfd_handle_interrupt(struct k_work* work_item)
             }
         }
     }
+
+    atomic_set(&data->in_interrupt_handler, false);
 }
 
 static void sc16is7xx_mfd_on_gpio_callback(  //
@@ -305,7 +306,7 @@ static void sc16is7xx_mfd_on_gpio_callback(  //
     ARG_UNUSED(port);
     ARG_UNUSED(pins);
 
-    #ifdef MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
+    #ifdef CONFIG_MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
     k_work_submit_to_queue(&data->interrupt_queue, &data->interrupt_work);
     #else
     k_work_submit(&data->interrupt_work);
@@ -470,6 +471,7 @@ static int sc16is7xx_device_init(const struct device* dev)
         return err;
     }
 
+    data->bus.gpio_regs = &data->bus_gpio_regs;
     data->bridges_len = 0;
     data->own_instance = dev;
 
@@ -485,13 +487,13 @@ static int sc16is7xx_device_init(const struct device* dev)
         return err;
     }
 
-#ifdef MFD_SC16IS7XX_INTERRUPT
+#ifdef CONFIG_MFD_SC16IS7XX_INTERRUPT
     if (!config->interrupt.on_setup) {
         LOG_INF(
             "Device '%s': Hardware interrupts are not enabled in the devicetree. Ignoring interrupt setup.", dev->name
         );
     } else {
-    #ifdef MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
+    #ifdef CONFIG_MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
         k_work_queue_start(  //
             &data->interrupt_queue,
             config->interrupt_queue_stack_area,
@@ -562,20 +564,17 @@ static int sc16is7xx_device_init(const struct device* dev)
 #define DT_INST_SC16IS7XX_CHILDREN_LEN(inst) \
     (DT_INST_FOREACH_CHILD_STATUS_OKAY_SEP(inst, DT_INST_SC16IS7XX_CHILDREN_LEN_1_, (+)))
 
-#define DT_INST_SC16IS7XX(inst, pn_suffix) \
-    DT_INST(inst, COND_CODE_1(DT_INST_ON_BUS(inst, spi), (nxp_sc16is##pn_suffix##_spi), (nxp_sc16is##pn_suffix##_i2c)))
+#define DT_INST_SC16IS7XX(inst, pn_suffix) DT_INST(inst, nxp_sc16is##pn_suffix)
 
 #define SC16IS7XX_CONFIG_DEVICE_INFO(inst, pn_suffix) \
     { \
-     .total_uart_channels = DT_INST_PROP(inst, total_uart_channels), \
-     .total_gpio_channels = DT_INST_PROP(inst, total_gpio_channels), \
-     .shared_gpio_channels_len = DT_INST_PROP_LEN(inst, shared_gpio_channels), \
-     .supports_hw_interrupts = \
-         MFD_SC16IS7XX_INTERRUPT_ENABLED && (DT_INST_NODE_HAS_PROP(inst, interrupt_gpios)), \
-     .supports_modem_flow_control = DT_INST_PROP(inst, supports_modem_flow_control), \
-     .part_id = DT_INST_ENUM_IDX(inst, part_number), \
-     .xtal_freq = DT_INST_PROP(inst, xtal_freq), \
-     .shared_gpio_channels = sc16is##pn_suffix##_device_shared_gpio_channels_##inst, \
+        .total_uart_channels = DT_INST_PROP(inst, total_uart_channels), \
+        .total_gpio_channels = DT_INST_PROP(inst, total_gpio_channels), \
+        .shared_gpio_channels_len = DT_INST_PROP_LEN(inst, shared_gpio_channels), \
+        .supports_hw_interrupts = MFD_SC16IS7XX_INTERRUPT_ENABLED && (DT_INST_NODE_HAS_PROP(inst, interrupt_gpios)), \
+        .supports_modem_flow_control = DT_INST_PROP(inst, supports_modem_flow_control), \
+        .part_id = DT_INST_ENUM_IDX(inst, part_number), .xtal_freq = DT_INST_PROP(inst, xtal_freq), \
+        .shared_gpio_channels = sc16is##pn_suffix##_device_shared_gpio_channels_##inst, \
     }
 
 #define SC16IS7XX_CONFIG_COMMON_PROPS(inst, pn_suffix) \
@@ -590,7 +589,7 @@ static int sc16is7xx_device_init(const struct device* dev)
     ) \
         .interrupt.on_setup = COND_CODE_1( \
         MFD_SC16IS7XX_INTERRUPT_ENABLED, \
-        COND_CODE_1(DT_INST_NODE_HAS_PROP(inst, interrupt_gpios), (sc16is7xx_device_on_setup_gpio), (NULL)), \
+        (COND_CODE_1(DT_INST_NODE_HAS_PROP(inst, interrupt_gpios), (sc16is7xx_mfd_on_setup_gpio), (NULL))), \
         (NULL) \
     ), \
      COND_CODE_1( \
@@ -599,18 +598,20 @@ static int sc16is7xx_device_init(const struct device* dev)
           .interrupt_queue_stack_area = &sc16is##pn_suffix##_device_interrupt_stack_area_##inst, ), \
          () \
      ) \
-     .device_info = &sc16is##pn_suffix##_device_info_##inst, \
+         .device_info = &sc16is##pn_suffix##_device_info_##inst, \
      .bridges_dt_info = sc16is##pn_suffix##_device_bridges_dt_info_##inst, \
      .bridges_cap = DT_INST_SC16IS7XX_CHILDREN_LEN(inst), .bridges_ptr = sc16is##pn_suffix##_device_subs_##inst
 
 #define SC16IS7XX_DATA_SPI(inst, pn_suffix) \
     { \
-        .bus.dev.spi = SPI_DT_SPEC_INST_GET(inst, SC16IS7XX_SPI_OPERATION, 0), .bus.api = &sc16is7xx_bus_api_spi, .ready = ATOMIC_INIT(0) \
+        .bus.dev.spi = SPI_DT_SPEC_INST_GET(inst, SC16IS7XX_SPI_OPERATION, 0), .bus.api = &sc16is7xx_bus_api_spi, \
+        .ready = ATOMIC_INIT(0), .in_interrupt_handler = ATOMIC_INIT(0) \
     }
 
 #define SC16IS7XX_DATA_I2C(inst, pn_suffix) \
     { \
-        .bus.dev.i2c = I2C_DT_SPEC_INST_GET(inst), .bus.api = &sc16is7xx_bus_api_i2c, .ready = ATOMIC_INIT(0) \
+        .bus.dev.i2c = I2C_DT_SPEC_INST_GET(inst), .bus.api = &sc16is7xx_bus_api_i2c, .ready = ATOMIC_INIT(0), \
+        .in_interrupt_handler = ATOMIC_INIT(0) \
     }
 
 #define SC16IS7XX_DEFINE_BRIDGE_DT(resolved_inst) \
@@ -637,11 +638,14 @@ static int sc16is7xx_device_init(const struct device* dev)
             DT_INST_PROP(inst, shared_gpio_channels); \
     static struct sc16is7xx_bridge_registration \
         sc16is##pn_suffix##_device_subs_##inst[DT_INST_SC16IS7XX_CHILDREN_LEN(inst)]; \
-    static struct sc16is7xx_device_info sc16is##pn_suffix##_device_info_##inst = SC16IS7XX_CONFIG_DEVICE_INFO(inst, pn_suffix); \
+    static struct sc16is7xx_device_info sc16is##pn_suffix##_device_info_##inst = \
+        SC16IS7XX_CONFIG_DEVICE_INFO(inst, pn_suffix); \
     static struct sc16is7xx_device_data sc16is##pn_suffix##_device_data_##inst = COND_CODE_1( \
         DT_INST_ON_BUS(inst, spi), (SC16IS7XX_DATA_SPI(inst, pn_suffix)), (SC16IS7XX_DATA_I2C(inst, pn_suffix)) \
     ); \
-    static const struct sc16is7xx_device_config sc16is##pn_suffix##_device_config_##inst = { SC16IS7XX_CONFIG_COMMON_PROPS(inst, pn_suffix) }; \
+    static const struct sc16is7xx_device_config sc16is##pn_suffix##_device_config_##inst = { \
+        SC16IS7XX_CONFIG_COMMON_PROPS(inst, pn_suffix) \
+    }; \
     DEVICE_DT_DEFINE( \
         DT_INST_SC16IS7XX(inst, pn_suffix), \
         sc16is7xx_device_init, \
@@ -655,50 +659,25 @@ static int sc16is7xx_device_init(const struct device* dev)
 
 #define SC16IS740_INIT(inst) SC16IS7XX_DEFINE(inst, 740)
 #undef DT_DRV_COMPAT
-#define DT_DRV_COMPAT nxp_sc16is740_i2c
-DT_INST_FOREACH_STATUS_OKAY(SC16IS740_INIT)
-
-#define SC16IS740_INIT(inst) SC16IS7XX_DEFINE(inst, 740)
-#undef DT_DRV_COMPAT
-#define DT_DRV_COMPAT nxp_sc16is740_spi
+#define DT_DRV_COMPAT nxp_sc16is740
 DT_INST_FOREACH_STATUS_OKAY(SC16IS740_INIT)
 
 #define SC16IS750_INIT(inst) SC16IS7XX_DEFINE(inst, 750)
 #undef DT_DRV_COMPAT
-#define DT_DRV_COMPAT nxp_sc16is750_i2c
-DT_INST_FOREACH_STATUS_OKAY(SC16IS750_INIT)
-
-#define SC16IS750_INIT(inst) SC16IS7XX_DEFINE(inst, 750)
-#undef DT_DRV_COMPAT
-#define DT_DRV_COMPAT nxp_sc16is750_spi
+#define DT_DRV_COMPAT nxp_sc16is750
 DT_INST_FOREACH_STATUS_OKAY(SC16IS750_INIT)
 
 #define SC16IS760_INIT(inst) SC16IS7XX_DEFINE(inst, 760)
 #undef DT_DRV_COMPAT
-#define DT_DRV_COMPAT nxp_sc16is760_i2c
-DT_INST_FOREACH_STATUS_OKAY(SC16IS760_INIT)
-
-#define SC16IS760_INIT(inst) SC16IS7XX_DEFINE(inst, 760)
-#undef DT_DRV_COMPAT
-#define DT_DRV_COMPAT nxp_sc16is760_spi
+#define DT_DRV_COMPAT nxp_sc16is760
 DT_INST_FOREACH_STATUS_OKAY(SC16IS760_INIT)
 
 #define SC16IS752_INIT(inst) SC16IS7XX_DEFINE(inst, 752)
 #undef DT_DRV_COMPAT
-#define DT_DRV_COMPAT nxp_sc16is752_i2c
-DT_INST_FOREACH_STATUS_OKAY(SC16IS752_INIT)
-
-#define SC16IS752_INIT(inst) SC16IS7XX_DEFINE(inst, 752)
-#undef DT_DRV_COMPAT
-#define DT_DRV_COMPAT nxp_sc16is752_spi
+#define DT_DRV_COMPAT nxp_sc16is752
 DT_INST_FOREACH_STATUS_OKAY(SC16IS752_INIT)
 
 #define SC16IS762_INIT(inst) SC16IS7XX_DEFINE(inst, 762)
 #undef DT_DRV_COMPAT
-#define DT_DRV_COMPAT nxp_sc16is762_i2c
-DT_INST_FOREACH_STATUS_OKAY(SC16IS762_INIT)
-
-#define SC16IS762_INIT(inst) SC16IS7XX_DEFINE(inst, 762)
-#undef DT_DRV_COMPAT
-#define DT_DRV_COMPAT nxp_sc16is762_spi
+#define DT_DRV_COMPAT nxp_sc16is762
 DT_INST_FOREACH_STATUS_OKAY(SC16IS762_INIT)

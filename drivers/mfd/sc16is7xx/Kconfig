@@ -4,25 +4,25 @@ config MFD_SC16IS7XX
 	bool "SC16IS7XX Single/Dual UART bridge with I2C-bus/SPI interface"
 	default y
 	depends on (\
-    DT_HAS_NXP_SC16IS740_I2C_ENABLED || DT_HAS_NXP_SC16IS740_SPI_ENABLED \
-    || DT_HAS_NXP_SC16IS750_I2C_ENABLED || DT_HAS_NXP_SC16IS750_SPI_ENABLED \
-    || DT_HAS_NXP_SC16IS760_I2C_ENABLED || DT_HAS_NXP_SC16IS760_SPI_ENABLED \
-    || DT_HAS_NXP_SC16IS752_I2C_ENABLED || DT_HAS_NXP_SC16IS752_SPI_ENABLED \
-    || DT_HAS_NXP_SC16IS762_I2C_ENABLED || DT_HAS_NXP_SC16IS762_SPI_ENABLED \
+    DT_HAS_NXP_SC16IS740_ENABLED \
+    || DT_HAS_NXP_SC16IS750_ENABLED \
+    || DT_HAS_NXP_SC16IS760_ENABLED \
+    || DT_HAS_NXP_SC16IS752_ENABLED \
+    || DT_HAS_NXP_SC16IS762_ENABLED \
   )
   select MFD
 	select I2C \
-    if $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS740_I2C),i2c) \
-    || $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS750_I2C),i2c) \
-    || $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS760_I2C),i2c) \
-    || $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS752_I2C),i2c) \
-    || $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS762_I2C),i2c)
+    if $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS740),i2c) \
+    || $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS750),i2c) \
+    || $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS760),i2c) \
+    || $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS752),i2c) \
+    || $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS762),i2c)
 	select SPI \
-    if $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS740_SPI),spi) \
-    || $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS750_SPI),spi) \
-    || $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS760_SPI),spi) \
-    || $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS752_SPI),spi) \
-    || $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS762_SPI),spi)
+    if $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS740),spi) \
+    || $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS750),spi) \
+    || $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS760),spi) \
+    || $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS752),spi) \
+    || $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS762),spi)
 	help
 	  Enable driver for SC16IS7XX I2C- or SPI- based Single/Dual UART bridge with I2C-bus/SPI interface.
 

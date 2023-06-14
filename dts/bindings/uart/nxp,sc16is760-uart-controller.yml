@@ -11,3 +11,16 @@ properties:
   channel:
     enum:
       - 0
+
+  supports-irda-fast-speed:
+    type: boolean
+    const: true
+    default: true
+
+  allow-irda-fast-speed:
+    type: boolean
+    description: |
+      Allows Fast (IrDA MIR) speeds, when `irda-transceiver` is enabled.
+
+      This option is in place because SC16IS7XX's fast-speed modes are NOT compatible with the
+      IrDA standard, therefore, the user must explicitly enable it in order to reduce conflicts.

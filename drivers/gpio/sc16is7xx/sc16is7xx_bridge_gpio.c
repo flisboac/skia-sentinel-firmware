@@ -21,7 +21,6 @@ struct sc16is7xx_gpio_data
     struct sc16is7xx_bridge_info bridge_info;
     const struct sc16is7xx_device_info* device_info;
     const struct device* own_instance;
-    uint8_t input_port_last;
 };
 
 static inline void sc16is7xx_gpio_command_wait(const struct device* dev)
@@ -110,7 +109,7 @@ static int sc16is7xx_gpio_process_input_UNSAFE_(  //
 
     if (value) { *value = sc16is7xx_gpio_public_port_value(dev, reg_value); }
 
-    bus->regs.iostate = reg_value;
+    bus->gpio_regs->current.iostate = reg_value;
 
     return err;
 }
@@ -140,6 +139,8 @@ static void sc16is7xx_gpio_handle_interrupt(  //
     uint8_t inputs_mask;
     int err = 0;
 
+    SC16IS7XX_BUS_LOCK_INIT(bus_lock);
+
     err = sc16is7xx_lock_bus(config->parent_dev, &bus_lock, K_FOREVER);
     if (err) {
         LOG_DBG("Device '%s': Could not lock device bus access!", dev->name);
@@ -148,10 +149,10 @@ static void sc16is7xx_gpio_handle_interrupt(  //
 
     bus_locked = true;
     raw_port_mask = sc16is7xx_gpio_raw_pin_mask(dev);
-    inputs_mask = ~bus_lock.bus->regs.iodir;
+    inputs_mask = ~bus_lock.bus->gpio_regs->current.iodir;
 
     if (bridge_index == 0) {
-        bus_lock.bus->prev_regs.iostate = bus_lock.bus->regs.iostate;
+        bus_lock.bus->gpio_regs->int_prev.iostate = bus_lock.bus->gpio_regs->current.iostate;
 
         err = sc16is7xx_gpio_process_input_UNSAFE_(dev, NULL, bus_lock.bus);
         if (err) {
@@ -159,11 +160,11 @@ static void sc16is7xx_gpio_handle_interrupt(  //
             goto end;
         }
 
-        bus_lock.bus->curr_regs.iostate = bus_lock.bus->regs.iostate;
+        bus_lock.bus->gpio_regs->int_curr.iostate = bus_lock.bus->gpio_regs->current.iostate;
     }
 
-    prev_input_port_last = bus_lock.bus->prev_regs.iostate & inputs_mask & raw_port_mask;
-    curr_input_port_last = bus_lock.bus->curr_regs.iostate & inputs_mask & raw_port_mask;
+    prev_input_port_last = bus_lock.bus->gpio_regs->int_prev.iostate & inputs_mask & raw_port_mask;
+    curr_input_port_last = bus_lock.bus->gpio_regs->int_curr.iostate & inputs_mask & raw_port_mask;
 
     err = sc16is7xx_unlock_bus(config->parent_dev, &bus_lock);
     if (err) { LOG_DBG("Device '%s': Could not unlock device bus access! Error code = %d", dev->name, err); }
@@ -210,6 +211,8 @@ static int sc16is7xx_gpio_port_set_raw(  //
     uint8_t pin_shift = (config->ngpios * data->bridge_info.channel_id);
     int err = 0;
 
+    SC16IS7XX_BUS_LOCK_INIT(bus_lock);
+
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
 
     err = sc16is7xx_lock_bus(config->parent_dev, &bus_lock, K_FOREVER);
@@ -223,7 +226,7 @@ static int sc16is7xx_gpio_port_set_raw(  //
     value = (value & 0x0f) << pin_shift;
     toggle = (toggle & 0x0f) << pin_shift;
 
-    reg_value = (bus->regs.iostate & ~(mask << pin_shift));
+    reg_value = (bus->gpio_regs->current.iostate & ~(mask << pin_shift));
     reg_value |= (value & mask);
     reg_value ^= toggle;
 
@@ -238,7 +241,9 @@ static int sc16is7xx_gpio_port_set_raw(  //
 
     sc16is7xx_gpio_xmit_wait(dev);
 
-    bus->regs.iostate = reg_value;
+    // sc16is7xx_bridge_log_registers_UNSAFE_(dev, &bus_lock.bus);
+
+    bus->gpio_regs->current.iostate = reg_value;
 
 end:
     if (sc16is7xx_unlock_bus(config->parent_dev, &bus_lock)) {
@@ -256,6 +261,8 @@ static int sc16is7xx_gpio_port_get_raw(const struct device* dev, gpio_port_value
     uint8_t raw_pin_mask = sc16is7xx_gpio_raw_pin_mask(dev);
     uint8_t* value8 = (uint8_t*) value;
     int err;
+
+    SC16IS7XX_BUS_LOCK_INIT(bus_lock);
 
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
 
@@ -320,6 +327,8 @@ static int sc16is7xx_gpio_pin_interrupt_configure(  //
     uint8_t pin_shift = (config->ngpios * data->bridge_info.channel_id);
     int err = 0;
     uint8_t pin_bit = BIT(pin);
+
+    SC16IS7XX_BUS_LOCK_INIT(bus_lock);
 
     if (!data->device_info->supports_hw_interrupts) {
         LOG_DBG(
@@ -431,6 +440,8 @@ static int sc16is7xx_gpio_pin_configure(const struct device* dev, gpio_pin_t pin
     uint8_t pin_shift = (config->ngpios * data->bridge_info.channel_id);
     int err = 0;
 
+    SC16IS7XX_BUS_LOCK_INIT(bus_lock);
+
     // RANT: Datasheet is not even clear what is the default state of GPIOs;
     // more specifically if a pin is put in input mode, is it open-drain? open-collector?
     if (flags == GPIO_DISCONNECTED || flags & GPIO_PULL_UP || flags & GPIO_PULL_DOWN || flags & GPIO_SINGLE_ENDED
@@ -445,8 +456,8 @@ static int sc16is7xx_gpio_pin_configure(const struct device* dev, gpio_pin_t pin
     }
 
     bus_locked = true;
-    pin_states = bus_lock.bus->regs.iostate;
-    pin_dirs = bus_lock.bus->regs.iodir;
+    pin_states = bus_lock.bus->gpio_regs->current.iostate;
+    pin_dirs = bus_lock.bus->gpio_regs->current.iodir;
 
     if (flags & GPIO_INPUT) {
         pin_dirs &= ~(BIT(pin) << pin_shift);
@@ -477,7 +488,7 @@ static int sc16is7xx_gpio_pin_configure(const struct device* dev, gpio_pin_t pin
         goto end;
     }
 
-    bus_lock.bus->regs.iodir = pin_dirs;
+    bus_lock.bus->gpio_regs->current.iodir = pin_dirs;
 
     reg_addr = SC16IS7XX_REG_IOSTATE(0, SC16IS7XX_REGRW_WRITE);
     err = sc16is7xx_bus_write_byte(bus_lock.bus, reg_addr, pin_states);
@@ -487,7 +498,7 @@ static int sc16is7xx_gpio_pin_configure(const struct device* dev, gpio_pin_t pin
         goto end;
     }
 
-    bus_lock.bus->regs.iostate = pin_states;
+    bus_lock.bus->gpio_regs->current.iostate = pin_states;
 
     sc16is7xx_gpio_command_wait(dev);
 
@@ -512,6 +523,8 @@ static int sc16is7xx_gpio_init(const struct device* dev)
     uint8_t reg_addr;
     uint8_t reg_value;
     int err;
+
+    SC16IS7XX_BUS_LOCK_INIT(bus_lock);
 
     if (!parent_dev) {
         err = -ENODEV;
@@ -589,7 +602,7 @@ static int sc16is7xx_gpio_init(const struct device* dev)
         goto end;
     }
 
-    bus_lock.bus->regs.iodir = reg_value;
+    bus_lock.bus->gpio_regs->current.iodir = reg_value;
 
     reg_addr = SC16IS7XX_REG_IOSTATE(0, SC16IS7XX_REGRW_READ);
     err = sc16is7xx_bus_read_byte(bus_lock.bus, reg_addr, &reg_value);
@@ -598,7 +611,7 @@ static int sc16is7xx_gpio_init(const struct device* dev)
         goto end;
     }
 
-    bus_lock.bus->regs.iostate = reg_value;
+    bus_lock.bus->gpio_regs->current.iostate = reg_value;
 
     sc16is7xx_bridge_log_registers_UNSAFE_(dev, bus_lock.bus);
 

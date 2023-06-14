@@ -1,5 +1,0 @@
-# SPDX-License-Identifier: Apache-2.0
-
-description: NXP SC16IS7XX I2C/SPI to UART bridge (I2C tnterface).
-
-include: ["nxp,sc16is7xx.yml", sensor-device.yaml, i2c-device.yaml]
