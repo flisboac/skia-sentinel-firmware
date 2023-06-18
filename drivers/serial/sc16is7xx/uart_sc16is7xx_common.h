@@ -21,42 +21,44 @@
 #define TLR_REG_VALUE(dev_config) \
     ((((dev_config)->tx_fifo_trigger_level / 4) & 0x0f) | ((((dev_config)->rx_fifo_trigger_level / 4) & 0x0f) << 4))
 
-#define BUS_READ_BYTE(err, dev, bus, channel_id, reg_name, value_addr) \
+#define BUS_READ_BYTE(err, dev, bus, reg_name, value_addr) \
     if (!(err = sc16is7xx_bus_read_byte( \
               bus, \
               SC16IS7XX_REG_##reg_name( \
-                  ((struct sc16is7xx_uart_data*) ((dev)->data))->bridge_info.channel_id, SC16IS7XX_REGRW_READ \
+                  ((struct sc16is7xx_uart_data*) (dev)->data)->bridge_info.channel_id, SC16IS7XX_REGRW_READ \
               ), \
               value_addr \
-          ), \
-          err)) { \
+          ))) { \
         LOG_DBG( \
             "Device '%s': Could not read register " #reg_name "@%d! Error code = %d", \
             (dev)->name, \
-            ((struct sc16is7xx_uart_data*) ((dev)->data))->bridge_info.channel_id, \
+            ((struct sc16is7xx_uart_data*) (dev)->data)->bridge_info.channel_id, \
             err \
         ); \
     } \
     if (!err) { }
 
-#define BUS_WRITE_BYTE(err, dev, bus, channel_id, reg_name, value) \
+#define BUS_READ_BYTE_ELSE_GOTO(label, code, err, dev, bus, reg_name, value_addr) BUS_READ_BYTE(err, dev, bus, reg_name, value_addr) else { err = code; goto label; }
+
+#define BUS_WRITE_BYTE(err, dev, bus, reg_name, value) \
     if (!(err = sc16is7xx_bus_write_byte( \
               bus, \
               SC16IS7XX_REG_##reg_name( \
-                  ((struct sc16is7xx_uart_data*) ((dev)->data))->bridge_info.channel_id, SC16IS7XX_REGRW_WRITE \
+                  ((struct sc16is7xx_uart_data*) (dev)->data)->bridge_info.channel_id, SC16IS7XX_REGRW_WRITE \
               ), \
               value \
-          ), \
-          err)) { \
+          ))) { \
         LOG_DBG( \
             "Device '%s': Could not write register " #reg_name "@%d = 0x%02x! Error code = %d", \
             (dev)->name, \
-            ((struct sc16is7xx_uart_data*) ((dev)->data))->bridge_info.channel_id, \
+            ((struct sc16is7xx_uart_data*) (dev)->data)->bridge_info.channel_id, \
             value, \
             err \
         ); \
     } \
     if (!err) { }
+
+#define BUS_WRITE_BYTE_ELSE_GOTO(label, code, err, dev, bus, reg_name, value) BUS_WRITE_BYTE(err, dev, bus, reg_name, value) else { err = code; goto label; }
 
 enum sc16is7xx_uart_operation_mode
 {
@@ -64,10 +66,23 @@ enum sc16is7xx_uart_operation_mode
     SC16IS7XX_UART_OPMODE_RS485
 };
 
-enum sc16is7xx_uart_hw_flow_mode
+enum sc16is7xx_uart_xon_any_mode
 {
-    SC16IS7XX_UART_HWFLOW_USER,
-    SC16IS7XX_UART_HWFLOW_AUTO
+    SC16IS7XX_UART_XONANY_AUTO,
+    SC16IS7XX_UART_XONANY_ALWAYS
+};
+
+enum sc16is7xx_uart_flow_ctrl_mode
+{
+    SC16IS7XX_UART_FLOWCTRL_USER,
+    SC16IS7XX_UART_FLOWCTRL_AUTO
+};
+
+enum sc16is7xx_uart_irda_pulse_width
+{
+    SC16IS7XX_UART_IRDAPULSE_AUTO,
+    SC16IS7XX_UART_IRDAPULSE_3_16,
+    SC16IS7XX_UART_IRDAPULSE_1_4
 };
 
 enum sc16is7xx_uart_sw_flow_mode
@@ -95,10 +110,9 @@ struct sc16is7xx_uart_callback
 {
     uart_irq_callback_user_data_t fn;
     void* ctx;
-}
+};
 
 struct sc16is7xx_uart_baud_rate_settings
-
 {
     int32_t target_value;
     int32_t actual_value;
@@ -127,19 +141,19 @@ struct sc16is7xx_uart_config
             uint32_t hw_transmit_loopback : 1;
             uint32_t enable_xon_any : 1;
             uint32_t enable_fifo : 1;
-            uint32_t enable_tcr_tlr : 1;
             uint32_t irda_transceiver : 1;
             uint32_t supports_modem_flow_control : 1;
             uint32_t supports_irda_fast_speed : 1;
-            uint32_t allow_irda_fast_speed : 1;
             uint32_t detect_special_character : 1;
             uint32_t rs485_invert_rts : 1;
         };
     };
 
-    struct sc16is7xx_uart_operation_mode operation_mode;
-    enum sc16is7xx_uart_hw_flow_mode hw_flow_mode;
+    enum sc16is7xx_uart_operation_mode operation_mode;
+    enum sc16is7xx_uart_flow_ctrl_mode flow_control_mode;
     enum sc16is7xx_uart_sw_flow_mode sw_flow_mode;
+    enum sc16is7xx_uart_xon_any_mode xon_any_mode;
+    enum sc16is7xx_uart_irda_pulse_width irda_pulse_width;
     uint8_t xon[3];
     uint8_t xoff[3];
     uint8_t baud_clock_prescaler;
@@ -147,7 +161,6 @@ struct sc16is7xx_uart_config
     uint8_t rx_fifo_trigger_level;
     uint8_t rx_fifo_halt_level;
     uint8_t rx_fifo_resume_level;
-    uint8_t ier_defaults;
 };
 
 struct sc16is7xx_uart_data
@@ -155,10 +168,14 @@ struct sc16is7xx_uart_data
     struct uart_config runtime_config;
     // struct sc16is7xx_bus bus;
     struct sc16is7xx_uart_callback callback;
+    enum sc16is7xx_uart_irda_pulse_width irda_pulse_width;
     struct k_sem lock;
     struct sc16is7xx_bridge_info bridge_info;
     const struct sc16is7xx_device_info* device_info;
     const struct device* own_instance;
+    bool interrupts_enabled;
+    uint8_t ier_enabled;
+    uint8_t ier_disabled;
 };
 
 static inline void sc16is7xx_uart_command_wait(const struct device* dev)
@@ -173,10 +190,16 @@ static inline void sc16is7xx_uart_xmit_wait(const struct device* dev)
     k_sleep(data->device_info->xmit_period);
 }
 
-SC16IS7XX_UART_COMMON_API sc16is7xx_uart_set_zephyr_config_UNSAFE_(  //
+SC16IS7XX_UART_COMMON_API int sc16is7xx_uart_set_zephyr_config_UNSAFE_(  //
     const struct device* dev,
     const struct sc16is7xx_bus* bus,
     const struct uart_config* settings
+);
+
+SC16IS7XX_UART_COMMON_API int sc16is7xx_uart_validate_baud_rate(
+    const struct device* dev,
+    uint32_t target_baud_rate,
+    uint32_t actual_baud_rate
 );
 
 SC16IS7XX_UART_COMMON_API int sc16is7xx_uart_err_check(const struct device* dev);

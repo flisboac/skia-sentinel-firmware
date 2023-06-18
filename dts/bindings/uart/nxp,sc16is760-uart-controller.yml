@@ -13,9 +13,9 @@ properties:
       - 0
 
   supports-irda-fast-speed:
-    type: boolean
-    const: true
-    default: true
+    type: int
+    const: 1
+    default: 1
 
   allow-irda-fast-speed:
     type: boolean

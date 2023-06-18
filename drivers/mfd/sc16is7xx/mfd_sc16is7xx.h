@@ -27,7 +27,7 @@
 #define SC16IS7XX_EXPLODE__(...) __VA_ARGS__
 #define SC16IS7XX_APPLY__(FN, ...) FN __VA_ARGS__
 
-#define SC16IS7XX_BITCHECK_1__(reg_value, field_mask, field_fbit) (((reg_value) & (field_mask)) == (field_mask))
+#define SC16IS7XX_BITCHECK_1__(reg_value, field_mask, field_fbit) ((reg_value) & (field_mask))
 #define SC16IS7XX_BITCHECK(reg_value, field) \
     SC16IS7XX_APPLY__(SC16IS7XX_BITCHECK_1__, (reg_value, SC16IS7XX_EXPLODE__ field))
 

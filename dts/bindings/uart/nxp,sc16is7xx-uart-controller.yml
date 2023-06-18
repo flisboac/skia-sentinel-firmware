@@ -46,19 +46,29 @@ properties:
     type: string
     default: rs232
     description: |
-      Specifies how the device will operate.
+      Specifies how the device will operate upon startup.
 
       Allowed values:
 
       - "rs232": Normal mode.
       - "rs485": Multidrop, or 9-bit (RS-485) mode.
 
-      In "rs485" mode, some configurations will be fixed, and therefore won't be
-      considered:
+      Some configurations will be fixed each time RS485 mode is set (either at startup, or when
+      setting `UART_CFG_FLOW_CTRL_RS485` via Zephyr's UART API):
 
       - `parity` is ignored, as that bit indicates when a device address is being sent.
-      - `stop-bits` is ignored.
-      - `data-bits = < 8 >`.
+        It will be initially set to "space". To communicate with some device in the UART line,
+        the user must then set parity to "mark", then send the byte address, followed by the
+        data to be sent.
+      - `disable_rx` will be force-enabled. As soon as the device receives a byte with a "mark"
+        parity bit, it receives that byte, puts it in the RX buffer, and triggers a line interrupt
+        which will be handled by the application. If `detect-special-character` is active (even if
+        through `device-address`), RX will be auto-enabled; otherwise, the application must enable
+        RX if needed. In any case, it's up to the application to disable RX again.
+
+      Note that the interrupt triggered by the device cannot be represented in Zephyr's UART API.
+      Your application will handle the interrupt, but won't see any discernible statewhen calling
+      `uart_err_check`.
     enum:
       - rs232
       - rs485
@@ -71,7 +81,8 @@ properties:
   device-address:
     type: int
     description: |
-      Sets the address to compare when `operation-mode = "rs485"`.
+      Sets the address to compare when `operation-mode = "rs485"`, or when setting
+      `UART_CFG_FLOW_CTRL_RS485` as the flow control mode.
 
       This configuration enables automatic detection of the address of the device to which
       transmission is intended to. When the address being transmitted DOES NOT equals this
@@ -125,17 +136,19 @@ properties:
       Control of those Modem Flow GPIO lines is mostly manual, but some degree of
       automation can be achieved through `hw-flow-mode`.
 
-  hw-flow-mode:
+  flow-control-mode:
     type: string
     default: auto
     description: |
-      Specifies how hardware flow will be driven.
+      Specifies how flow control will be driven.
 
-      - "user": The user will control the hardware flow control GPIO lines explicitly.
-      - "auto": Hardware flow control GPIO lines will be driven either by the driver or
-        by the device itself.
+      - "user": The user will perform flow control explicitly (e.g. setting GPIO lines
+        manually, or specifying `sw-flow-mode`).
+      - "auto": Flow control lines will be driven either by the driver or by the device itself.
 
-      Automatic hardware flow control means direct control of RTS and CTS lines.
+      Automatic hardware flow control means:
+      - Direct control of RTS and CTS lines, when in hardware flow mode; or
+      - Automatic identification or transmit of XON/XOFF characters, when in software flow mode.
 
       If in automatic mode, and `modem-flow-control` is enabled, `DTR` will be set once
       the device is initialized, and control afterwards will be passed to the user. This
@@ -264,12 +277,12 @@ properties:
       - 576 Kbit/s
       - 1.152 Mbit/s
 
-      For those faster speeds (MIR), you should also enable `allow-irda-fast-speed`, but be aware
-      that the the SC16IS7XX series of ICs implement a proprietary communication protocol loosely
-      based on the standard, and therefore are NOT compatible with any other IR device that's NOT
-      from Philips/NXP.
+      For those faster speeds, you should also configure `irda-pulse-width = "auto"` or
+      `irda-pulse-width = "1/4"`, but be aware that the the SC16IS7XX series of ICs DOES NOT
+      implement proper MIR, as per the standard. In those cases, the device will use a
+      proprietary communication protocol loosely based on the standard.
 
-      `allow-irda-fast-speed` is only supported for the SC16IS76X series (ie. SC16IS760 and
+      `irda-pulse-width` is only supported for the SC16IS76X series (ie. SC16IS760 and
       SC16IS762).
 
       For more information on IrDA Mode, check the datasheet, or NXP/Philips' Application
@@ -281,9 +294,7 @@ properties:
       Enables parity interrupt upon receiving a XOFF[2] character, without halting
       transmission.
 
-      This is only valid when running in RS232 mode. In RS485 mode, special character
-      detection is effectively configured through `device-address`, either by definition
-      (enabled) or omission (disabled, ie. no detection).
+      In RS485 mode, special character detection is force-enabled if `device-address` is set.
 
   enable-xon-any:
     type: boolean
@@ -296,6 +307,21 @@ properties:
       XON[2] to be written to the RX FIFO.
 
       Please see the datasheet, section "Software flow control", for more details.
+
+  xon-any-mode:
+    type: string
+    default: auto
+    description: |
+      Specifies how Xon-Any mode will operate.
+
+      - "always": xon-any will always be enabled, regardless of operation or control flow
+        mode.
+      - "auto": xon-any will be automatically activated when flow control is automatic.
+
+      See `enable-xon-any` for more details.
+    enum:
+      - auto
+      - always
 
   enable-sleep-mode:
     type: boolean

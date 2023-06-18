@@ -5,7 +5,7 @@
 
 LOG_MODULE_REGISTER(nxp_sc16is7xx_uart_controller_poll, CONFIG_UART_LOG_LEVEL);
 
-static int sc16is7xx_uart_poll_in(const struct device* dev, unsigned char* p_char)
+int sc16is7xx_uart_poll_in(const struct device* dev, unsigned char* p_char)
 {
     const struct sc16is7xx_uart_config* config = dev->config;
     const struct device* parent_dev = config->parent_dev;
@@ -49,7 +49,7 @@ end:
     return err;
 }
 
-static int sc16is7xx_uart_poll_out(const struct device* dev, unsigned char p_char)
+void sc16is7xx_uart_poll_out(const struct device* dev, unsigned char p_char)
 {
     const struct sc16is7xx_uart_config* config = dev->config;
     const struct device* parent_dev = config->parent_dev;
@@ -66,7 +66,7 @@ static int sc16is7xx_uart_poll_out(const struct device* dev, unsigned char p_cha
     err = sc16is7xx_lock_bus(parent_dev, &bus_lock, K_FOREVER);
     if (err) {
         LOG_DBG("Device '%s': Could not lock bus! Error code = %d", dev->name, err);
-        return err;
+        return;
     }
 
     // Ensure we have at least one byte available in the FIFO
@@ -130,6 +130,4 @@ end:
     if (sc16is7xx_unlock_bus(parent_dev, &bus_lock)) {  //
         LOG_DBG("Device '%s': Could not unlock bus!", dev->name);
     }
-
-    return 0;
 }

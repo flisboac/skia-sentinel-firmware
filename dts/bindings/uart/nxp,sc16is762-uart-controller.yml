@@ -14,14 +14,23 @@ properties:
       - 1
 
   supports-irda-fast-speed:
-    type: boolean
-    const: true
-    default: true
+    type: int
+    const: 1
+    default: 1
 
-  allow-irda-fast-speed:
-    type: boolean
+  irda-pulse-width:
+    type: string
+    default: "3/16"
     description: |
-      Allows Fast (IrDA MIR) speeds, when `irda-transceiver` is enabled.
+      Sets TX/RX pulse width, when `irda-transceiver` is enabled.
 
-      This option is in place because SC16IS7XX's fast-speed modes are NOT compatible with the
-      IrDA standard, therefore, the user must explicitly enable it in order to reduce conflicts.
+      For "auto", the pulse width will be selected when the baud rate is set to any
+      speed greater than 115.2Kbps.
+
+      This option (and its "3/16" default) is in place because SC16IS7XX's fast-speed
+      modes are NOT compatible with the IrDA standard, therefore, the user must
+      explicitly enable it in order to reduce conflicts.
+    enum:
+      - auto
+      - "3/16"
+      - "1/4"

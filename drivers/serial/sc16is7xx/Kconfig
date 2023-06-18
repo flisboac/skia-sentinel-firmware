@@ -34,15 +34,15 @@ config UART_SC16IS7XX_INIT_PRIORITY
     also be taken as a priority if GPIO ports collide with modem flow
     control ports.
 
-config CONFIG_UART_SC16IS7XX_LINE_CTRL
+config UART_SC16IS7XX_LINE_CTRL
   bool "SC16IS7XX UART controller interrupt controls"
   default y
-  depends on CONFIG_UART_LINE_CTRL
+  depends on UART_LINE_CTRL
 
-config CONFIG_UART_SC16IS7XX_USE_RUNTIME_CONFIGURE
+config UART_SC16IS7XX_USE_RUNTIME_CONFIGURE
   bool "SC16IS7XX UART controller runtime configuration"
   default y
-  depends on CONFIG_UART_USE_RUNTIME_CONFIGURE
+  depends on UART_USE_RUNTIME_CONFIGURE
 
 config UART_SC16IS7XX_INTERRUPT_DRIVEN
   bool "SC16IS7XX UART controller interrupt controls"
