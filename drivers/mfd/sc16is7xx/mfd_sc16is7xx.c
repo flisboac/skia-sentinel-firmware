@@ -23,6 +23,12 @@
     #define MFD_SC16IS7XX_INTERRUPT_OWN_THREAD_ENABLED 0
 #endif
 
+#ifdef CONFIG_MFD_SC16IS7XX_INTERRUPT_TRIGGER_NO_POLLING
+    #define MFD_SC16IS7XX_INTERRUPT_TRIGGER_NO_POLLING_ENABLED 1
+#else
+    #define MFD_SC16IS7XX_INTERRUPT_TRIGGER_NO_POLLING_ENABLED 0
+#endif
+
 LOG_MODULE_REGISTER(nxp_sc16is7xx_mfd, CONFIG_MFD_LOG_LEVEL);
 
 /**
@@ -77,10 +83,11 @@ struct sc16is7xx_device_data
 #ifdef CONFIG_MFD_SC16IS7XX_INTERRUPT
     atomic_t in_interrupt_handler;
     struct k_work interrupt_work;
+    struct k_timer timer;
+    struct gpio_callback gpio_interrupt_callback;
     #ifdef CONFIG_MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
     struct k_work_q interrupt_queue;
     #endif /* CONFIG_MFD_SC16IS7XX_INTERRUPT_OWN_THREAD */
-    struct gpio_callback gpio_interrupt_callback;
 #endif /* CONFIG_MFD_SC16IS7XX_INTERRUPT */
 };
 
@@ -156,11 +163,9 @@ int sc16is7xx_enqueue_interrupt_work(  //
 
     if (!mfd_dev || !work) { return -EINVAL; }
 
-#ifndef CONFIG_MFD_SC16IS7XX_INTERRUPT
+#if !defined(CONFIG_MFD_SC16IS7XX_INTERRUPT)
     return -ENOTSUP;
-#endif
-
-#ifdef CONFIG_MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
+#elif defined(CONFIG_MFD_SC16IS7XX_INTERRUPT_OWN_THREAD)
     data = mfd_dev->data;
     return k_work_submit_to_queue(&data->interrupt_queue, work);
 #else
@@ -229,7 +234,7 @@ static int sc16is7xx_mfd_init_bridges_UNSAFE_(const struct device* mfd_dev)
     return 0;
 }
 
-#ifdef CONFIG_MFD_SC16IS7XX_INTERRUPT
+#if defined(CONFIG_MFD_SC16IS7XX_INTERRUPT)
 static void sc16is7xx_mfd_handle_interrupt(struct k_work* work_item)
 {
     size_t i;
@@ -260,7 +265,7 @@ static void sc16is7xx_mfd_handle_interrupt(struct k_work* work_item)
         while (!err && has_interrupts) {
             err = sc16is7xx_lock_bus(dev, &bus_lock, K_FOREVER);
             if (err) {
-                LOG_DBG("Device '%s': Could not lock device bus access! Error code = %d", dev->name, err);
+                LOG_ERR("Device '%s': Could not lock device bus access! Error code = %d", dev->name, err);
                 break;
             }
 
@@ -284,12 +289,45 @@ static void sc16is7xx_mfd_handle_interrupt(struct k_work* work_item)
 
             for (i = 0; i < data->bridges_len; ++i) {
                 sub = config->bridges_ptr + i;
-                sub->bridge_info->on_interrupt(sub->bridge_info, &interrupt_info, i);
+                if (sub->bridge_info->on_interrupt) {
+                    sub->bridge_info->on_interrupt(sub->bridge_info, &interrupt_info, i);
+                }
             }
         }
     }
 
     atomic_set(&data->in_interrupt_handler, false);
+}
+
+static void sc16is7xx_mfd_on_timer_callback(struct k_timer* timer)
+{
+    struct sc16is7xx_device_data* const data = CONTAINER_OF(timer, struct sc16is7xx_device_data, timer);
+    const struct device* const dev = data->own_instance;
+    const struct sc16is7xx_device_config* const config = dev->config;
+    const struct sc16is7xx_bus* const bus = &data->bus;
+
+    #ifdef CONFIG_MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
+    k_work_submit_to_queue(&data->interrupt_queue, &data->interrupt_work);
+    #else
+    k_work_submit(&data->interrupt_work);
+    #endif
+}
+
+SC16IS7XX_MAYBE_UNUSED static int sc16is7xx_mfd_on_setup_timer_interrupts(const struct device* dev)
+{
+    struct sc16is7xx_device_data* data = dev->data;
+    const struct sc16is7xx_device_config* config = dev->config;
+
+    __ASSERT(config->device_info->interrupt_polling_period > 0, "interrupt was disabled");
+
+    k_timer_init(&data->timer, sc16is7xx_mfd_on_timer_callback, NULL);
+    k_timer_start(
+        &data->timer,
+        K_NSEC(config->device_info->interrupt_polling_period),
+        K_NSEC(config->device_info->interrupt_polling_period)
+    );
+
+    return 0;
 }
 
 static void sc16is7xx_mfd_on_gpio_callback(  //
@@ -313,7 +351,7 @@ static void sc16is7xx_mfd_on_gpio_callback(  //
     #endif
 }
 
-SC16IS7XX_MAYBE_UNUSED static int sc16is7xx_mfd_on_setup_gpio(const struct device* dev)
+SC16IS7XX_MAYBE_UNUSED static int sc16is7xx_mfd_on_setup_gpio_interrupts(const struct device* dev)
 {
     const struct sc16is7xx_device_config* config = dev->config;
     struct sc16is7xx_device_data* data = dev->data;
@@ -349,7 +387,7 @@ SC16IS7XX_MAYBE_UNUSED static int sc16is7xx_mfd_on_setup_gpio(const struct devic
     return ret;
 }
 
-#endif
+#endif /* CONFIG_MFD_SC16IS7XX_INTERRUPT */
 
 static int sc16is7xx_device_validate_dt_info(const struct device* dev)
 {
@@ -363,7 +401,6 @@ static int sc16is7xx_device_validate_dt_info(const struct device* dev)
     // Here, we only perform the semantic validations, for aspects
     // of the implementation that cannot be described or restricted at
     // Devicetree level.
-    //
 
     for (i = 0; i < config->bridges_cap; i++) {
         lhs_bridge_dt = config->bridges_dt_info + i;
@@ -487,13 +524,11 @@ static int sc16is7xx_device_init(const struct device* dev)
         return err;
     }
 
-#ifdef CONFIG_MFD_SC16IS7XX_INTERRUPT
-    if (!config->interrupt.on_setup) {
-        LOG_INF(
-            "Device '%s': Hardware interrupts are not enabled in the devicetree. Ignoring interrupt setup.", dev->name
-        );
+#if defined(CONFIG_MFD_SC16IS7XX_INTERRUPT)
+    if (!config->device_info->supports_interrupts || !config->interrupt.on_setup) {
+        LOG_DBG("Device '%s': Interrupts are NOT enabled.", dev->name);
     } else {
-    #ifdef CONFIG_MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
+    #if defined(CONFIG_MFD_SC16IS7XX_INTERRUPT_OWN_THREAD)
         k_work_queue_start(  //
             &data->interrupt_queue,
             config->interrupt_queue_stack_area,
@@ -502,6 +537,7 @@ static int sc16is7xx_device_init(const struct device* dev)
             NULL
         );
     #endif
+
         k_work_init(&data->interrupt_work, sc16is7xx_mfd_handle_interrupt);
 
         err = config->interrupt.on_setup(dev);
@@ -560,6 +596,9 @@ static int sc16is7xx_device_init(const struct device* dev)
     return err;
 }
 
+#define DT_INST_SC16IS7XX_POLLING_ENABLED(inst) \
+    (!MFD_SC16IS7XX_INTERRUPT_TRIGGER_NO_POLLING_ENABLED && DT_INST_PROP_OR(inst, interrupt_polling_period, 0) > 0)
+
 #define DT_INST_SC16IS7XX_CHILDREN_LEN_1_(inst) (1)
 #define DT_INST_SC16IS7XX_CHILDREN_LEN(inst) \
     (DT_INST_FOREACH_CHILD_STATUS_OKAY_SEP(inst, DT_INST_SC16IS7XX_CHILDREN_LEN_1_, (+)))
@@ -571,10 +610,13 @@ static int sc16is7xx_device_init(const struct device* dev)
         .total_uart_channels = DT_INST_PROP(inst, total_uart_channels), \
         .total_gpio_channels = DT_INST_PROP(inst, total_gpio_channels), \
         .shared_gpio_channels_len = DT_INST_PROP_LEN(inst, shared_gpio_channels), \
-        .supports_hw_interrupts = MFD_SC16IS7XX_INTERRUPT_ENABLED && (DT_INST_NODE_HAS_PROP(inst, interrupt_gpios)), \
+        .supports_interrupts = MFD_SC16IS7XX_INTERRUPT_ENABLED \
+            && (DT_INST_NODE_HAS_PROP(inst, interrupt_gpios) || DT_INST_SC16IS7XX_POLLING_ENABLED(inst)), \
+        .interrupt_polling_period = \
+            DT_INST_PROP_OR(inst, interrupt_polling_period, CONFIG_MFD_SC16IS7XX_INTERRUPT_POLLING_PERIOD), \
         .supports_modem_flow_control = DT_INST_PROP(inst, supports_modem_flow_control), \
         .part_id = DT_INST_ENUM_IDX(inst, part_number), .xtal_freq = DT_INST_PROP(inst, xtal_freq), \
-        .shared_gpio_channels = sc16is##pn_suffix##_device_shared_gpio_channels_##inst, \
+        .shared_gpio_channels = sc16is##pn_suffix##_device_shared_gpio_channels_##inst \
     }
 
 #define SC16IS7XX_CONFIG_COMMON_PROPS(inst, pn_suffix) \
@@ -589,7 +631,13 @@ static int sc16is7xx_device_init(const struct device* dev)
     ) \
         .interrupt.on_setup = COND_CODE_1( \
         MFD_SC16IS7XX_INTERRUPT_ENABLED, \
-        (COND_CODE_1(DT_INST_NODE_HAS_PROP(inst, interrupt_gpios), (sc16is7xx_mfd_on_setup_gpio), (NULL))), \
+        (COND_CODE_1( \
+            DT_INST_NODE_HAS_PROP(inst, interrupt_gpios), \
+            (sc16is7xx_mfd_on_setup_gpio_interrupts), \
+            (COND_CODE_1( \
+                MFD_SC16IS7XX_INTERRUPT_TRIGGER_NO_POLLING_ENABLED, (sc16is7xx_mfd_on_setup_timer_interrupts), (NULL) \
+            )) \
+        )), \
         (NULL) \
     ), \
      COND_CODE_1( \

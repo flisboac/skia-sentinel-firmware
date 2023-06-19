@@ -3,6 +3,12 @@
 
 #include <zephyr/logging/log.h>
 
+#ifdef CONFIG_UART_SC16IS7XX_INTERRUPT_DRIVEN
+#define CONFIG_UART_SC16IS7XX_INTERRUPT_DRIVEN_ENABLED 1
+#else
+#define CONFIG_UART_SC16IS7XX_INTERRUPT_DRIVEN_ENABLED 0
+#endif
+
 LOG_MODULE_REGISTER(nxp_sc16is7xx_uart_controller, CONFIG_UART_LOG_LEVEL);
 
 static void sc16is7xx_uart_handle_interrupt(  //
@@ -142,6 +148,7 @@ static int sc16is7xx_uart_init(const struct device* dev)
     uint8_t mcr_data;
     uint8_t fcr_data;
     uint8_t efcr_data;
+    uint8_t ier_data;
     int err;
 
     SC16IS7XX_BUS_LOCK_INIT(bus_lock);
@@ -236,20 +243,28 @@ static int sc16is7xx_uart_init(const struct device* dev)
         BUS_WRITE_BYTE_ELSE_GOTO(end, -EIO, err, dev, bus_lock.bus, TLR, TLR_REG_VALUE(config));
     }
 
+
+#if defined(CONFIG_UART_SC16IS7XX_INTERRUPT_DRIVEN) && defined(CONFIG_MFD_SC16IS7XX_INTERRUPT_TRIGGER_GPIO)
     data->ier_enabled = 0;
     data->ier_disabled = 0;
 
-#ifdef CONFIG_UART_SC16IS7XX_INTERRUPT_DRIVEN
     data->ier_enabled = SC16IS7XX_BITSET(data->ier_enabled, SC16IS7XX_REGFLD_IER_MODEM);
     data->ier_enabled = SC16IS7XX_BITSET(data->ier_enabled, SC16IS7XX_REGFLD_IER_RXLINE);
-    data->ier_enabled = SC16IS7XX_BITSET(data->ier_enabled, SC16IS7XX_REGFLD_IER_THR);
+    // data->ier_enabled = SC16IS7XX_BITSET(data->ier_enabled, SC16IS7XX_REGFLD_IER_THR);
     data->ier_enabled = SC16IS7XX_BITSET(data->ier_enabled, SC16IS7XX_REGFLD_IER_RHR);
-#endif /* CONFIG_UART_SC16IS7XX_INTERRUPT_DRIVEN */
 
     if (config->enable_sleep_mode) {
         data->ier_enabled = SC16IS7XX_BITSET(data->ier_enabled, SC16IS7XX_REGFLD_IER_SLEEP);
         data->ier_disabled = SC16IS7XX_BITSET(data->ier_disabled, SC16IS7XX_REGFLD_IER_SLEEP);
     }
+#else
+    ier_data = 0;
+
+    if (config->enable_sleep_mode) {
+        ier_data = SC16IS7XX_BITSET(ier_data, SC16IS7XX_REGFLD_IER_SLEEP);
+    }
+#endif /* CONFIG_UART_SC16IS7XX_INTERRUPT_DRIVEN */
+
 
     if (config->disable_rx) {
         efcr_data = SC16IS7XX_BITSET(efcr_data, SC16IS7XX_REGFLD_EFCR_RXDISABLE);
@@ -268,8 +283,7 @@ static int sc16is7xx_uart_init(const struct device* dev)
     data->interrupts_enabled = true;
     BUS_WRITE_BYTE_ELSE_GOTO(end, -EIO, err, dev, bus_lock.bus, IER, data->ier_enabled);
 #else
-    data->interrupts_enabled = false;
-    BUS_WRITE_BYTE_ELSE_GOTO(end, -EIO, err, dev, bus_lock.bus, IER, data->ier_disabled);
+    BUS_WRITE_BYTE_ELSE_GOTO(end, -EIO, err, dev, bus_lock.bus, IER, ier_data);
 #endif
 
 end:
@@ -372,10 +386,9 @@ static const struct uart_driver_api sc16is7xx_uart_driver_api = {
     static struct sc16is7xx_uart_data sc16is##pn_suffix##_uart_data_##inst = { \
         .lock = Z_SEM_INITIALIZER(sc16is##pn_suffix##_uart_data_##inst.lock, 1, 1), \
         .irda_pulse_width = DT_INST_ENUM_IDX_OR(inst, irda_pulse_width, 1), \
-        .callback.fn = NULL, \
         .bridge_info.kind = SC16IS7XX_BRIDGE_UART, \
         .bridge_info.channel_id = DT_INST_PROP(inst, channel), \
-        .bridge_info.on_interrupt = sc16is7xx_uart_handle_interrupt \
+        .bridge_info.on_interrupt = CONFIG_UART_SC16IS7XX_INTERRUPT_DRIVEN_ENABLED ? sc16is7xx_uart_handle_interrupt : NULL \
     }; \
     static const struct sc16is7xx_uart_config sc16is##pn_suffix##_uart_config_##inst = { \
         SC16IS7XX_CONFIG_COMMON_PROPS(inst, pn_suffix) \

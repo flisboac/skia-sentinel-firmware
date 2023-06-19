@@ -328,17 +328,17 @@ static int sc16is7xx_gpio_pin_interrupt_configure(  //
     int err = 0;
     uint8_t pin_bit = BIT(pin);
 
-    SC16IS7XX_BUS_LOCK_INIT(bus_lock);
-
-    if (!data->device_info->supports_hw_interrupts) {
+    if (!data->device_info->supports_interrupts) {
         LOG_DBG(
-            "Device '%s', pin %d: Hardware interrupts are not enabled at the MFD level. Check the parent DTS node's "
+            "Device '%s', pin %d: Interrupts are not enabled at the MFD level. Check the parent DTS node's "
             "configuration.",
             dev->name,
             pin
         );
         return -ENOTSUP;
     }
+
+    SC16IS7XX_BUS_LOCK_INIT(bus_lock);
 
     if (mode != GPIO_INT_MODE_DISABLED || mode != GPIO_INT_MODE_LEVEL) {
         LOG_DBG("Device '%s', pin %d: Unsupported interrupt mode '%d'", dev->name, pin, mode);

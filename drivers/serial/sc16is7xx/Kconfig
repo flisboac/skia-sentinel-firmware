@@ -68,7 +68,7 @@ config UART_SC16IS7XX_ASYNC_API
   default y
   depends on UART_ASYNC_API
   help
-    Activates UART asyncrhonous controls.
+    Activates UART asynchronous controls.
 
 config MFD_SC16IS7XX_ASYNC_THREAD_PRIORITY
 	int "Async API's Thread priority"

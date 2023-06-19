@@ -12,7 +12,7 @@ int sc16is7xx_uart_validate_baud_rate(const struct device* dev, uint32_t target_
 
     if (target_baud_rate != actual_baud_rate) {
         LOG_WRN(
-            "Device '%s': actual baud rate = '%s' is off by '%d' units, compared to target baud rate '%s'",
+            "Device '%s': actual baud rate = '%d' is off by '%d' units, compared to target baud rate '%d'",
             dev->name,
             actual_baud_rate,
             actual_baud_rate - target_baud_rate,

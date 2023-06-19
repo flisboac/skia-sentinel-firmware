@@ -303,9 +303,10 @@ struct sc16is7xx_device_info
     uint8_t total_gpio_channels;
     uint8_t shared_gpio_channels_len;
     bool supports_modem_flow_control;
-    bool supports_hw_interrupts;
+    bool supports_interrupts;
     enum sc16is7xx_part_id part_id;
     uint32_t xtal_freq;
+    int32_t interrupt_polling_period;
     k_timeout_t xtal_period;
     k_timeout_t xmit_period;
     k_timeout_t cmd_period;

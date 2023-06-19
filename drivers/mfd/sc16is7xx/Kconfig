@@ -4,76 +4,98 @@ config MFD_SC16IS7XX
 	bool "SC16IS7XX Single/Dual UART bridge with I2C-bus/SPI interface"
 	default y
 	depends on (\
-    DT_HAS_NXP_SC16IS740_ENABLED \
-    || DT_HAS_NXP_SC16IS750_ENABLED \
-    || DT_HAS_NXP_SC16IS760_ENABLED \
-    || DT_HAS_NXP_SC16IS752_ENABLED \
-    || DT_HAS_NXP_SC16IS762_ENABLED \
-  )
-  select MFD
+		DT_HAS_NXP_SC16IS740_ENABLED \
+		|| DT_HAS_NXP_SC16IS750_ENABLED \
+		|| DT_HAS_NXP_SC16IS760_ENABLED \
+		|| DT_HAS_NXP_SC16IS752_ENABLED \
+		|| DT_HAS_NXP_SC16IS762_ENABLED \
+	)
+	select MFD
 	select I2C \
-    if $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS740),i2c) \
-    || $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS750),i2c) \
-    || $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS760),i2c) \
-    || $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS752),i2c) \
-    || $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS762),i2c)
+		if $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS740),i2c) \
+		|| $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS750),i2c) \
+		|| $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS760),i2c) \
+		|| $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS752),i2c) \
+		|| $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS762),i2c)
 	select SPI \
-    if $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS740),spi) \
-    || $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS750),spi) \
-    || $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS760),spi) \
-    || $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS752),spi) \
-    || $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS762),spi)
+		if $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS740),spi) \
+		|| $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS750),spi) \
+		|| $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS760),spi) \
+		|| $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS752),spi) \
+		|| $(dt_compat_on_bus,$(DT_COMPAT_NXP_SC16IS762),spi)
+	select GPIO \
+		if $(dt_node_has_prop,$(DT_COMPAT_NXP_SC16IS740),interrupt-gpios)
 	help
-	  Enable driver for SC16IS7XX I2C- or SPI- based Single/Dual UART bridge with I2C-bus/SPI interface.
+		Enable driver for SC16IS7XX I2C- or SPI- based Single/Dual UART
+		bridge with I2C-bus/SPI interface.
 
 if MFD_SC16IS7XX
 
 config MFD_SC16IS7XX_DEVICE_INIT_PRIORITY
-  int "SC16IS7XX GPIO controller initialization priority"
-  default 60
-  help
-    Sets the MFD driver's initialization priority.
-
-    The priority MUST be higher in value (ie. lower in priority) than
-    either the SPI or I2C drivers being used.
-
-choice MFD_SC16IS7XX_INTERRUPT_MODE
-	prompt "Interrupt mode"
-	default MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
+	int "SC16IS7XX GPIO controller initialization priority"
+	default 60
 	help
-	  Specify the type of interrupt handling to be used by the driver.
-    #The interrupt work queue, if created, MAY BE shared amongst all of
-    #the device' children (ie. UART and GPIO devices).
+		Sets the MFD driver's initialization priority.
 
-config MFD_SC16IS7XX_INTERRUPT_NONE
-	bool "No interrupt handling"
+		The priority MUST be higher in value (ie. lower in priority) than
+		either the SPI or I2C drivers being used.
+
+choice MFD_SC16IS7XX_INTERRUPT_TRIGGER
+	prompt "Interrupt mode"
+	default MFD_SC16IS7XX_INTERRUPT_TRIGGER_AUTO
+	help
+		Specify the type of interrupt handling to be used by the driver.
+
+config MFD_SC16IS7XX_INTERRUPT_TRIGGER_NONE
+	bool "Do not treat interrupts"
+
+config MFD_SC16IS7XX_INTERRUPT_TRIGGER_AUTO
+	bool "Select mode automatically, depending on devicetree configuration"
+	select MFD_SC16IS7XX_INTERRUPT
+
+endchoice # MFD_SC16IS7XX_INTERRUPT_THREAD
+
+config MFD_SC16IS7XX_INTERRUPT_TRIGGER_NO_POLLING
+	bool "Prohibits use of interrupt polling when triggering is automatic"
+
+config MFD_SC16IS7XX_INTERRUPT_POLLING_PERIOD
+	int "Polling interrupt mode's wait time"
+	default 1000
+	help
+		Default polling period, in nanoseconds.
+
+choice MFD_SC16IS7XX_INTERRUPT_THREAD
+	prompt "Interrupt threading mode"
+	default MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
+	depends on MFD_SC16IS7XX_INTERRUPT
+	help
+		Specify the type of interrupt handling to be used by the driver.
+		The interrupt work queue, if created, MAY BE shared amongst all of
+		the device' children (ie. UART and GPIO devices).
 
 config MFD_SC16IS7XX_INTERRUPT_GLOBAL_THREAD
 	bool "Use global thread"
-	select MFD_SC16IS7XX_INTERRUPT
 
 config MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
 	bool "Use own thread"
-	select MFD_SC16IS7XX_INTERRUPT
 
 endchoice # MFD_SC16IS7XX_INTERRUPT_MODE
 
 config MFD_SC16IS7XX_INTERRUPT
 	bool
-	select GPIO
 
 config MFD_SC16IS7XX_INTERRUPT_THREAD_PRIORITY
 	int "Thread priority"
 	depends on MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
 	default 5
 	help
-	  Priority of thread used by the driver to handle interrupts.
+		Priority of thread used by the driver to handle interrupts.
 
 config MFD_SC16IS7XX_INTERRUPT_THREAD_STACK_SIZE
 	int "Thread stack size"
 	depends on MFD_SC16IS7XX_INTERRUPT_OWN_THREAD
 	default 1024
 	help
-	  Stack size of thread used by the driver to handle interrupts.
+		Stack size of thread used by the driver to handle interrupts.
 
 endif # MFD_SC16IS7XX

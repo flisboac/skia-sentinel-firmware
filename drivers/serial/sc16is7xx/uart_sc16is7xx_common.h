@@ -163,19 +163,39 @@ struct sc16is7xx_uart_config
     uint8_t rx_fifo_resume_level;
 };
 
+enum sc16is7xx_uart_async_status
+{
+    SC16IS7XX_UART_ASYNC_STOPPED,
+    SC16IS7XX_UART_ASYNC_READY,
+    SC16IS7XX_UART_ASYNC_STARTED,
+    SC16IS7XX_UART_ASYNC_BUF_REQUEST
+};
+
+struct sc16is7xx_uart_async_data
+{
+    enum sc16is7xx_uart_async_status tx_status;
+    enum sc16is7xx_uart_async_status rx_status;
+    uart_callback_t callback_fn;
+    void* callback_ctx;
+};
+
 struct sc16is7xx_uart_data
 {
     struct uart_config runtime_config;
     // struct sc16is7xx_bus bus;
-    struct sc16is7xx_uart_callback callback;
+#if defined(CONFIG_UART_SC16IS7XX_ASYNC_API)
+    struct sc16is7xx_uart_async_data async;
+#endif
     enum sc16is7xx_uart_irda_pulse_width irda_pulse_width;
     struct k_sem lock;
     struct sc16is7xx_bridge_info bridge_info;
     const struct sc16is7xx_device_info* device_info;
     const struct device* own_instance;
+#ifdef CONFIG_UART_SC16IS7XX_INTERRUPT_DRIVEN
     bool interrupts_enabled;
     uint8_t ier_enabled;
     uint8_t ier_disabled;
+#endif
 };
 
 static inline void sc16is7xx_uart_command_wait(const struct device* dev)
