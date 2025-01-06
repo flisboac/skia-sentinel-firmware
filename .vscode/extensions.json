@@ -1,22 +1,30 @@
 {
   "recommendations": [
-    "jeff-hykin.better-cpp-syntax",
-    "ms-vscode.cmake-tools",
-    "ms-vscode.cpptools-extension-pack",
+    "CS128.cs128-clang-tidy",
+    "eamodio.gitlens",
+    "EditorConfig.EditorConfig",
     "marus25.cortex-debug",
-    "ms-vscode-remote.remote-containers",
+    "mcu-debug.debug-tracker-vscode",
+    "mhutchie.git-graph",
     "ms-azuretools.vscode-docker",
-    "betwo.vscode-doxygen-runner",
-    "editorconfig.editorconfig",
+    "ms-python.python",
+    "ms-vscode.cmake-tools",
+    "ms-vscode.cpptools-themes",
+    "ms-vscode.cpptools",
+    "ms-vscode.vscode-embedded-tools",
+    "ms-vscode.vscode-serial-monitor",
+    "mylonics.zephyr-ide",
+    "nordic-semiconductor.nrf-connect-extension-pack",
+    "nordic-semiconductor.nrf-connect",
     "nordic-semiconductor.nrf-devicetree",
     "nordic-semiconductor.nrf-kconfig",
-    "nordic-semiconductor.nrf-terminal",
-    "mcu-debug.rtos-views",
-    "redhat.vscode-yaml",
-    "dbaeumer.vscode-eslint",
-    "ms-python.isort",
-    "ms-python.python",
-    "njpwerner.autodocstring",
-    "wholroyd.jinja"
+    "platformio.platformio-ide",
+    "stkb.rewrap",
+    "trond-snekvik.gnu-mapfiles",
+    "wayou.vscode-todo-highlight",
+    "xaver.clang-format"
+  ],
+  "unwantedRecommendations": [
+    "ms-vscode.cpptools-extension-pack"
   ]
 }

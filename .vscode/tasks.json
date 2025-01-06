@@ -1,32 +1,34 @@
 {
-  // See https://go.microsoft.com/fwlink/?LinkId=733558
-  // for the documentation about the tasks.json format
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Build",
+      "label": "build, debug, pristine: esp32s3_devkitc_procpu",
       "type": "shell",
-      "command": "cd app && west build",
+      "command": "west build -b esp32s3_devkitc/esp32s3/procpu \"${workspaceFolder}/app\" -p --build-dir \"${workspaceFolder}/app/build/esp32s3_devkitc_procpu\" --sysbuild -- -DBOARD_ROOT=\"${workspaceFolder}\"  -DCONFIG_DEBUG_OPTIMIZATIONS=y -DCONFIG_DEBUG_THREAD_INFO=y -DOPENOCD=${env:OPENOCD_ESP32} -DOPENOCD_DEFAULT_PATH=${env:OPENOCD_ESP32_DEFAULT_PATH}",
       "group": {
-        "kind": "build",
-        "isDefault": true
-      },
-      "options": {
-        "env": {
-          "BOARD": "wemos_c3_mini"
-        }
+        "kind": "build"
       }
     },
     {
-      "label": "Flash",
+      "label": "build, debug: esp32s3_devkitc_procpu",
       "type": "shell",
-      "command": "cd app && west flash",
+      "command": "west build -b esp32s3_devkitc/esp32s3/procpu \"${workspaceFolder}/app\" --build-dir \"${workspaceFolder}/app/build/esp32s3_devkitc_procpu\" --sysbuild -- -DBOARD_ROOT=\"${workspaceFolder}\"  -DCONFIG_DEBUG_OPTIMIZATIONS=y -DCONFIG_DEBUG_THREAD_INFO=y -DOPENOCD=${env:OPENOCD_ESP32} -DOPENOCD_DEFAULT_PATH=${env:OPENOCD_ESP32_DEFAULT_PATH}",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "flash: esp32s3_devkitc_procpu",
+      "type": "shell",
+      "command": "cd \"${workspaceFolder}/app/build/esp32s3_devkitc_procpu\" && west flash",
       "group": "test"
     },
     {
-      "label": "Debug Server",
+      "label": "debugserver: esp32s3_devkitc_procpu",
       "type": "shell",
-      "command": "cd app && west debugserver",
+      "isBackground": true,
+      "command": "cd \"${workspaceFolder}/app\" && west debugserver --build-dir build/esp32s3_devkitc_procpu/app --target-handle _CHIPNAME.cpu0 --cmd-pre-init 'set ESP_RTOS Zephyr; set ESP_FLASH_SIZE 0' --cmd-pre-init '$_CHIPNAME.cpu0 configure -rtos Zephyr' --cmd-pre-init '$_CHIPNAME.cpu1 configure -rtos Zephyr' --cmd-reset-halt 'set remotelogfile gdb.log; init; reset halt'",
       "group": "test"
     },
     {

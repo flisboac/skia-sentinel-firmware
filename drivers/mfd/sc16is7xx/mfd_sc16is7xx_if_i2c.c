@@ -8,7 +8,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/i2c.h>
 
-LOG_MODULE_DECLARE(nxp_sc16is7xx_i2c, CONFIG_SENSOR_LOG_LEVEL);
+LOG_MODULE_DECLARE(nxp_sc16is7xx_i2c, CONFIG_MFD_LOG_LEVEL);
 
 static int sc16is7xx_bus_check_i2c(const union sc16is7xx_bus_dev* bus)
 {

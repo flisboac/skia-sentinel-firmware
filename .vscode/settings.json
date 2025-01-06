@@ -1,38 +1,48 @@
 {
   "files.associations": {
+    "*.env": "properties",
     "*.overlay": "dts",
     "*.keymap": "dts",
-    "*.c": "c"
+    "*.c": "c",
+    "*.h": "c"
   },
-  "python.formatting.provider": "black",
   "nrf-connect.west.env": {
     "$base": "terminal",
-    "ZEPHYR_EXTRA_MODULES": "${workspaceFolder}"
+    // "ZEPHYR_EXTRA_MODULES": "${workspaceFolder}"
   },
   "C_Cpp.default.configurationProvider": "nordic-semiconductor.nrf-connect",
-  "cmake.environment": {
-    "ZEPHYR_BASE": "${workspaceFolder}/ext/zephyr",
-    "ESPTOOL_CHIP": "esp32c3",
-    "ESPTOOL_PORT": "/dev/ttyACM0",
-    "ESPTOOL_BAUD": "460800",
-    "ESPTOOL_FF": "80m",
-    "ZEPHYR_EXTRA_MODULES": "${workspaceFolder}",
-    "OPENOCD": "/usr/bin/openocd-esp32openocd",
-    "OPENOCD_DEFAULT_PATH": "/usr/share/openocd-esp32/scripts"
-  },
-  "cmake.configureArgs": [
-    "-DZEPHYR_EXTRA_MODULES=${workspaceFolder}",
-    "-DOPENOCD=/usr/bin/openocd-esp32openocd",
-    "-DOPENOCD_DEFAULT_PATH=/usr/share/openocd-esp32/scripts"
+  // "cmake.environment": {
+  //   "ZEPHYR_BASE": "${workspaceFolder}/ext/zephyr",
+  //   "ESPTOOL_CHIP": "esp32c3",
+  //   "ESPTOOL_PORT": "/dev/ttyACM0",
+  //   "ESPTOOL_BAUD": "460800",
+  //   "ESPTOOL_FF": "80m",
+  //   "ZEPHYR_EXTRA_MODULES": "${workspaceFolder}",
+  //   "OPENOCD": "/usr/bin/openocd-esp32openocd",
+  //   "OPENOCD_DEFAULT_PATH": "/usr/share/openocd-esp32/scripts"
+  // },
+  // "cmake.configureArgs": [
+  //   "-DZEPHYR_EXTRA_MODULES=${workspaceFolder}",
+  //   "-DOPENOCD=/usr/bin/openocd-esp32openocd",
+  //   "-DOPENOCD_DEFAULT_PATH=/usr/share/openocd-esp32/scripts"
+  // ],
+  // "cmake.configureEnvironment": {
+  //   "BOARD": "wemos_c3_mini"
+  // },
+  // "cmake.exportCompileCommandsFile": true,
+  // "cmake.loadCompileCommands": true,
+  // "cmake.sourceDirectory": "${workspaceFolder}/app",
+  // "cmake.buildDirectory": "${workspaceFolder}/app/build",
+  // "makefile.compileCommandsPath": "${workspaceFolder}/app/build/compile_commands.json",
+  // "devicetree.defaultBoard": "wemos_c3_mini",
+  "devicetree.zephyr": "${workspaceFolder}/ext/zephyr",
+  "nrf-connect.applications": [
+    "${workspaceFolder}/app"
   ],
-  "cmake.configureEnvironment": {
-    "BOARD": "wemos_c3_mini"
+  "nrf-connect.debugging.bindings": {
+    "${workspaceFolder}/app/build/esp32_devkitc_wroom_procpu": "Launch esp32_devkitc_wroom_procpu"
   },
-  "cmake.exportCompileCommandsFile": true,
-  "cmake.loadCompileCommands": true,
-  "cmake.sourceDirectory": "${workspaceFolder}/app",
-  "cmake.buildDirectory": "${workspaceFolder}/app/build",
-  "makefile.compileCommandsPath": "${workspaceFolder}/app/build/compile_commands.json",
-  "devicetree.defaultBoard": "wemos_c3_mini",
-  "devicetree.zephyr": "${workspaceFolder}/ext/zephyr"
+  "kconfig.zephyr.base": "${workspaceFolder}/ext/zephyr",
+  "zephyr-ide.use-zephyr-ide-json": true,
+  "zephyr-ide.projects": null
 }

@@ -13,9 +13,13 @@
 #include <zephyr/types.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
+#if ENS160_BUS_I2C
 #include <zephyr/drivers/i2c.h>
+#endif
+#if ENS160_BUS_SPI
 #include <zephyr/drivers/spi.h>
-#include <zephyr/drivers/sensor/ens160.h>
+#endif
+#include <zephyr/drivers/sensor/skia_ens160.h>
 
 // #if DT_NUM_INST_STATUS_OKAY(DT_DRV_COMPAT) == 0
 // #error "no sciosense_ens160 DT available"

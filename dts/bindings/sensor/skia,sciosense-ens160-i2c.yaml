@@ -3,7 +3,7 @@
 
 description: ENS160 Digital Metal-Oxide Multi-Gas Sensor
 
-compatible: "sciosense,ens160"
+compatible: "skia,sciosense-ens160"
 
 include: [sensor-device.yaml, i2c-device.yaml]
 

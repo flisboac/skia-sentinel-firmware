@@ -10,7 +10,7 @@
 
 // TODO Implementation.
 
-LOG_MODULE_DECLARE(nxp_sc16is7xx_spi, CONFIG_SENSOR_LOG_LEVEL);
+LOG_MODULE_DECLARE(nxp_sc16is7xx_spi, CONFIG_MFD_LOG_LEVEL);
 
 static int sc16is7xx_bus_check_spi(const union sc16is7xx_bus_dev* dev)
 {

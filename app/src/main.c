@@ -12,12 +12,11 @@
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/kernel.h>
-#include <zephyr/drivers/sensor/ens160.h>
+#include <zephyr/drivers/sensor/skia_ens160.h>
 
 /* 1000 msec = 1 sec */
 #define CYCLE_TIME_MS 1000
 #define POLL_CYCLES_COUNT 5
-#define LED0_NODE DT_ALIAS(uart_bridge_led0)
 // #define LED0_NODE DT_ALIAS(led0)
 
 /*
@@ -31,25 +30,31 @@ static bool th_ready;
 static bool gpio_ready;
 static struct sensor_value curr_temp = {0}, curr_hum = {0};
 
-static void i2c_scan();
+static void i2c_scan(const struct device *i2c_dev);
 static void measure_th_(const struct device* const dev);
 static void measure_thp_(const struct device* const dev);
 static void measure_voc_eco2_(const struct device* const dev);
 
 int main(void)
 {
+    while(esp_log_timestamp() < (20*1000)) {
+        k_sleep(K_MSEC(200));
+    }
+
     int ret;
     int cycle = 0;
     gpio_ready = false;
 
     printk("initializing...\n");
 
-    // i2c_scan();
+    const struct device *i2c0_dev = DEVICE_DT_GET(DT_NODELABEL(i2c0));
 
-    const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
-    const struct device* const dev_voc_eco2 = DEVICE_DT_GET_ONE(sciosense_ens160);
-    const struct device* const dev_th = DEVICE_DT_GET_ONE(sensirion_sht3xd);
-    const struct device* const dev_thp = DEVICE_DT_GET_ONE(bosch_bme680);
+    i2c_scan(i2c0_dev);
+
+    const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(DT_ALIAS(uart_bridge_led0), gpios);
+    const struct device* const dev_voc_eco2 = DEVICE_DT_GET(DT_NODELABEL(ens160));
+    const struct device* const dev_th = DEVICE_DT_GET(DT_NODELABEL(sht30));
+    const struct device* const dev_thp = DEVICE_DT_GET(DT_NODELABEL(bme680));
     int rc;
 
     k_msleep(CYCLE_TIME_MS * POLL_CYCLES_COUNT);
@@ -114,11 +119,8 @@ int main(void)
     return 0;
 }
 
-#define I2C_NODE DT_ALIAS(i2c0)
-#define I2C_DEV	DT_LABEL(I2C_NODE)
 
-void i2c_scan() {
-    const struct device *i2c_dev = DEVICE_DT_GET(DT_ALIAS(i2c0));
+static void i2c_scan(const struct device *i2c_dev) {
 
     if (!device_is_ready(i2c_dev)) {
 		printk("I2C: Device driver not found.\n");
@@ -160,7 +162,7 @@ void i2c_scan() {
 	printk("Find the registered I2C address on: https://i2cdevices.org/addresses\n\n");
 }
 
-void measure_th_(const struct device* const dev)
+static void measure_th_(const struct device* const dev)
 {
     int rc;
     struct sensor_value temp, hum;
@@ -176,7 +178,7 @@ void measure_th_(const struct device* const dev)
     printf("SHT3XD: T = %.2f C ; RH = %0.2f %%\n", sensor_value_to_double(&temp), sensor_value_to_double(&hum));
 }
 
-void measure_thp_(const struct device* const dev)
+static void measure_thp_(const struct device* const dev)
 {
     int rc;
     struct sensor_value temp, press, humidity, gas_res;
@@ -207,7 +209,7 @@ void measure_thp_(const struct device* const dev)
     }
 }
 
-void measure_voc_eco2_(const struct device* const dev)
+static void measure_voc_eco2_(const struct device* const dev)
 {
     int rc;
     struct sensor_value tvoc, eco2, aqi_uba, part_id, fw_major, fw_minor, fw_build, opmode, status;

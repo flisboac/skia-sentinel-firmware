@@ -5,7 +5,7 @@ if [ ! -e "${PROJECT_ROOT}/.env" ]; then
   cp "${PROJECT_ROOT}/.env.sample" "${PROJECT_ROOT}/.env"
 fi
 printf 'Sourcing env-var file: %s\n' "${PROJECT_ROOT}/.env" >&2
-source "${PROJECT_ROOT}/.env"
+. "${PROJECT_ROOT}/.env"
 for __VAR_NAME__ in $(grep -E '[_[:alnum:]]=.*' "${PROJECT_ROOT}/.env" | cut -d= -f1); do
   export "${__VAR_NAME__}"
 done

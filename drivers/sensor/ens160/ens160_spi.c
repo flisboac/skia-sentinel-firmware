@@ -21,7 +21,7 @@
 
 #if ENS160_BUS_SPI
 
-LOG_MODULE_DECLARE(ens160, CONFIG_SENSOR_LOG_LEVEL);
+LOG_MODULE_DECLARE(skia_ens160_spi, CONFIG_SENSOR_LOG_LEVEL);
 
 static int ens160_bus_check_spi(const union ens160_bus *bus)
 {

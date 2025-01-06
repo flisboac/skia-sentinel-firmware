@@ -1,1 +1,1 @@
-add_subdirectory_ifdef(CONFIG_ENS160 ens160)
+add_subdirectory_ifdef(CONFIG_SKIA_ENS160 ens160)

@@ -5,18 +5,18 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-menuconfig ENS160
+menuconfig SKIA_ENS160
 	bool "ENS160 Digital Metal-Oxide Multi-Gas Sensor"
 	default y
-	depends on DT_HAS_SCIOSENSE_ENS160_ENABLED
+	depends on DT_HAS_SKIA_SCIOSENSE_ENS160_ENABLED
   select SENSOR
-	select I2C if $(dt_compat_on_bus,$(DT_COMPAT_SCIOSENSE_ENS160),i2c)
-	select SPI if $(dt_compat_on_bus,$(DT_COMPAT_SCIOSENSE_ENS160),spi)
+	select I2C if $(dt_compat_on_bus,$(DT_COMPAT_SKIA_SCIOSENSE_ENS160),i2c)
+	select SPI if $(dt_compat_on_bus,$(DT_COMPAT_SKIA_SCIOSENSE_ENS160),spi)
 	help
 	  Enable driver for ENS160 I2C- or SPI- based TVOC, eCO2 and AQI-UBA and gas sensor.
 
-if ENS160
-  config ENS160_FORCE_OPMODE
+if SKIA_ENS160
+  config SKIA_ENS160_FORCE_OPMODE
     bool "Forces changing the device's OPMODE for each measurement cycle"
     help
       Forces the device to enter a specific OPMODE for each measurement cycle.

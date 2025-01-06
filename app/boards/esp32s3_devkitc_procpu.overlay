@@ -4,7 +4,6 @@
     sensor-thp = &bme680;
     sensor-tvoc = &ens160;
     uart-bridge = &sc16is762;
-    i2c0 = &wemos_c3_mini_i2c;
     uart-bridge-led0 = &uart_bridge_led0;
   };
 
@@ -33,8 +32,8 @@
 		reg = <0x77>;
 	};
 
-	ens160: skia,sciosense-ens160@53 {
-    compatible = "skia,sciosense-ens160";
+	ens160: ens160@53 {
+    compatible = "sciosense,ens160";
     status = "okay";
 		reg = <0x53>;
 	};
@@ -47,14 +46,12 @@
     interrupt-gpios = <&gpio0 21 0>;
 
     sc16is762_uart0: nxp,sc16is762-uart0 {
-      status = "okay";
       compatible = "nxp,sc16is762-uart-controller";
       uart-controller;
       channel = < 0 >;
     };
 
     sc16is762_gpio1: nxp,sc16is762-gpio1 {
-      status = "okay";
       compatible = "nxp,sc16is762-gpio-controller";
       gpio-controller;
       channel = < 1 >;

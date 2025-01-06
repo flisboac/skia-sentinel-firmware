@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.20.0)
 
 set(ZephyrBuildConfiguration_ROOT ${CMAKE_SOURCE_DIR}/cmake)
+# list(APPEND CONF_FILE ${CMAKE_CURRENT_SOURCE_DIR}/prj.conf)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 message("app: ZEPHYR_SKIA_FIRMWARE_CMAKE_DIR = ${ZEPHYR_SKIA_FIRMWARE_CMAKE_DIR}")
 

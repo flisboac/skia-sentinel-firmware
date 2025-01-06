@@ -6,8 +6,19 @@ manifest:
     - name: zephyr
       remote: zephyrproject-rtos
       #revision: main
-      revision: 9515a5228beb8dd6c77bc3c9b16e97422bd08cd3
-      import: true
+      revision: v4.0.0 # 9515a5228beb8dd6c77bc3c9b16e97422bd08cd3
+      import:
+        name-allowlist:
+          - cmsis
+          - hal_espressif
+          - hal_xtensa
+          - lvgl
+          - littlefs
+          - mbedtls
+          - mcuboot
+          - picolibc
+          - segger
+          - tinycrypt
       west-commands: scripts/west-commands.yml
       path: ext/zephyr
 

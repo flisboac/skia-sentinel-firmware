@@ -14,6 +14,8 @@
 #include "ens160.h"
 
 #if ENS160_BUS_I2C
+LOG_MODULE_DECLARE(skia_ens160_i2c, CONFIG_SENSOR_LOG_LEVEL);
+
 static int ens160_bus_check_i2c(const union ens160_bus* bus)
 {
     return device_is_ready(bus->i2c.bus) ? 0 : -ENODEV;

@@ -9,7 +9,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
-LOG_MODULE_REGISTER(ens160, CONFIG_SENSOR_LOG_LEVEL);
+LOG_MODULE_REGISTER(skia_ens160, CONFIG_SENSOR_LOG_LEVEL);
 
 static inline void ens160_default_wait()
 {
